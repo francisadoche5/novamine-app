@@ -11,7 +11,9 @@ services:
     plan: free                # bump to starter once traffic warrants it
     rootDir: .                # build from the monorepo root so workspaces resolve
     branch: main
-    buildCommand: npm install && npm run build:api
+    # NODE_ENV=production (set below) makes `npm install` skip devDependencies.
+    # We need TypeScript + tsx + @types/* to compile, so force them in.
+    buildCommand: npm install --include=dev && npm run build:api
     startCommand: node apps/api/dist/index.js
     healthCheckPath: /health
     autoDeploy: true
