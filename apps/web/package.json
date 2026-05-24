@@ -1,0 +1,22 @@
+{
+  "name": "@novamine/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --port 5173"
+  },
+  "dependencies": {
+    "@novamine/shared": "*",
+    "@supabase/supabase-js": "^2.45.4",
+    "@telegram-apps/sdk-react": "^2.0.16",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^5.4.10"
+  }
+}
