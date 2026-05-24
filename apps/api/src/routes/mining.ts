@@ -1,9 +1,3 @@
-// Mining endpoints — server-authoritative timing.
-//   POST /mining/start  → opens a session that becomes claimable after MINING_DURATION_MS
-//   POST /mining/claim  → if claimable, credits hashes and closes the session
-//
-// All ad-watch attestation will be added in v1.1; for now we trust the client
-// to have watched the rewarded ad before calling these endpoints.
 import { Router } from "express";
 import { requireAuth } from "../middleware/auth.js";
 import { supabaseAdmin } from "../lib/supabase.js";
@@ -13,9 +7,8 @@ export const miningRouter = Router();
 
 miningRouter.post("/start", requireAuth, async (req, res, next) => {
   try {
-    const userId = req.auth!.sub;
+    const userId = (req as any).auth!.sub;
 
-    // Reject if there's an active (unclaimed) session
     const { data: active } = await supabaseAdmin
       .from("mining_sessions")
       .select("id")
@@ -52,7 +45,7 @@ miningRouter.post("/start", requireAuth, async (req, res, next) => {
 
 miningRouter.post("/claim", requireAuth, async (req, res, next) => {
   try {
-    const userId = req.auth!.sub;
+    const userId = (req as any).auth!.sub;
 
     const { data: session, error: selErr } = await supabaseAdmin
       .from("mining_sessions")
@@ -69,7 +62,6 @@ miningRouter.post("/claim", requireAuth, async (req, res, next) => {
       return res.status(425).json({ error: "Not claimable yet", claimReadyAt: session.claim_ready_at });
     }
 
-    // Compute payout from the user's mining_power. For v1 we use a flat amount.
     const { data: user } = await supabaseAdmin
       .from("users")
       .select("mining_power, hashes, ton_balance")
@@ -78,9 +70,8 @@ miningRouter.post("/claim", requireAuth, async (req, res, next) => {
     if (!user) return res.status(404).json({ error: "User not found" });
 
     const power = Number(user.mining_power ?? MINING.DEFAULT_POWER);
-    const hashesEarned = MINING.hashesPerSession(power); // shared helper
+    const hashesEarned = MINING.hashesPerSession(power);
 
-    // Update balances atomically via RPC if you have one; for v1 we do two updates.
     await supabaseAdmin
       .from("mining_sessions")
       .update({ claimed_at: new Date().toISOString(), hashes_earned: hashesEarned })
@@ -88,9 +79,7 @@ miningRouter.post("/claim", requireAuth, async (req, res, next) => {
 
     const { data: updated, error: upErr } = await supabaseAdmin
       .from("users")
-      .update({
-        hashes: Number(user.hashes ?? 0) + hashesEarned,
-      })
+      .update({ hashes: Number(user.hashes ?? 0) + hashesEarned })
       .eq("id", userId)
       .select("hashes, ton_balance")
       .single();
