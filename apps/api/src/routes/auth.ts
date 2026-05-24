@@ -1,7 +1,3 @@
-// POST /auth/telegram
-// Body: { initData: string, startParam?: string|null }
-// Validates the Telegram-signed initData, upserts the user in Supabase,
-// records the referrer (if any & not already set), and mints a JWT.
 import { Router } from "express";
 import { z } from "zod";
 import { validateInitData } from "../auth/telegram.js";
@@ -24,7 +20,6 @@ authRouter.post("/telegram", async (req, res, next) => {
     const ref = startParam ?? validated.startParam ?? null;
     const referrerTelegramId = parseReferral(ref);
 
-    // Upsert user by telegram_id. The DB default fills in `id` (uuid) and timestamps.
     const { data: existing, error: selErr } = await supabaseAdmin
       .from("users")
       .select("id, telegram_id, username, referrer_id")
@@ -35,7 +30,6 @@ authRouter.post("/telegram", async (req, res, next) => {
     let userId: string;
 
     if (!existing) {
-      // Resolve referrer id (if a valid referral code was passed)
       let referrerId: string | null = null;
       if (referrerTelegramId && referrerTelegramId !== tg.id) {
         const { data: refUser } = await supabaseAdmin
@@ -62,17 +56,17 @@ authRouter.post("/telegram", async (req, res, next) => {
       if (insErr) throw insErr;
       userId = inserted.id;
 
-      // Record the referral relationship in its own table for tracking
       if (referrerId) {
-        await supabaseAdmin
-          .from("referrals")
-          .insert({ referrer_id: referrerId, referred_id: userId, status: "pending" })
-          .then(() => null)
-          .catch(() => null); // ignore unique-violation if double-insert
+        try {
+          await supabaseAdmin
+            .from("referrals")
+            .insert({ referrer_id: referrerId, referred_id: userId, status: "pending" });
+        } catch (_) {
+          // ignore duplicate
+        }
       }
     } else {
       userId = existing.id;
-      // Refresh profile fields opportunistically
       await supabaseAdmin
         .from("users")
         .update({
@@ -93,7 +87,7 @@ authRouter.post("/telegram", async (req, res, next) => {
 
     res.json({
       accessToken,
-      refreshToken: accessToken, // simple model for now; rotation can come later
+      refreshToken: accessToken,
       user: {
         id: userId,
         telegramId: tg.id,
@@ -108,11 +102,6 @@ authRouter.post("/telegram", async (req, res, next) => {
   }
 });
 
-/**
- * Telegram passes referral codes as the deep-link argument.
- * We use the convention `ref_<telegramId>` so the bot can hand out links like
- *   t.me/NovaMineBot/app?startapp=ref_12345
- */
 function parseReferral(raw: string | null | undefined): number | null {
   if (!raw) return null;
   const m = /^ref_(\d{1,15})$/.exec(raw);
