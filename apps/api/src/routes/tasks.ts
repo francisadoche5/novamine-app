@@ -1,9 +1,3 @@
-// Tasks (channel joins, partner bot starts, etc.)
-//   GET  /tasks                → list + claim status
-//   POST /tasks/:id/claim      → mark complete + grant NOVA reward
-//
-// For v1 we trust the client. v1.1 will verify with bot.api.getChatMember()
-// for channel-join tasks, etc.
 import { Router } from "express";
 import { z } from "zod";
 import { requireAuth } from "../middleware/auth.js";
@@ -14,7 +8,7 @@ export const tasksRouter = Router();
 
 tasksRouter.get("/", requireAuth, async (req, res, next) => {
   try {
-    const userId = req.auth!.sub;
+    const userId = (req as any).auth!.sub;
     const { data: completions, error } = await supabaseAdmin
       .from("tasks_completed")
       .select("task_id, completed_at")
@@ -38,7 +32,7 @@ tasksRouter.post("/:id/claim", requireAuth, async (req, res, next) => {
     const task = TASKS.LIST.find((t) => String(t.id) === id);
     if (!task) return res.status(404).json({ error: "Unknown task" });
 
-    const userId = req.auth!.sub;
+    const userId = (req as any).auth!.sub;
 
     const { data: existing } = await supabaseAdmin
       .from("tasks_completed")
