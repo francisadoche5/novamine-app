@@ -1,7 +1,3 @@
-// Shop: list NOVA mining-power tiers + accept purchase confirmations.
-//   GET  /shop          → public list of tiers
-//   POST /shop/buy      → user submits a TON tx hash; server records it pending
-//                         (verification of on-chain receipt happens in v1.1)
 import { Router } from "express";
 import { z } from "zod";
 import { requireAuth } from "../middleware/auth.js";
@@ -25,7 +21,7 @@ shopRouter.post("/buy", requireAuth, async (req, res, next) => {
     const tier = SHOP.TIERS.find((t) => t.id === tierId);
     if (!tier) return res.status(404).json({ error: "Unknown tier" });
 
-    const userId = req.auth!.sub;
+    const userId = (req as any).auth!.sub;
 
     const { data: purchase, error } = await supabaseAdmin
       .from("shop_purchases")
