@@ -1,11 +1,5 @@
 // Auth middleware — extracts Bearer token, verifies it, attaches req.auth.
-import { verifyUserJwt, type NovamineJwtPayload } from "../auth/jwt.js";
-
-export interface AuthRequest {
-  auth?: NovamineJwtPayload;
-  headers: Record<string, string | string[] | undefined>;
-  [key: string]: any;
-}
+import { verifyUserJwt } from "../auth/jwt.js";
 
 export function requireAuth(req: any, res: any, next: any) {
   const header = (req.headers.authorization as string) ?? "";
