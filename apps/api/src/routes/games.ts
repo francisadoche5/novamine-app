@@ -1,4 +1,3 @@
-// Slots & Dice. The server, not the client, decides the outcome and the cooldown.
 import { Router } from "express";
 import { requireAuth } from "../middleware/auth.js";
 import { supabaseAdmin } from "../lib/supabase.js";
@@ -6,12 +5,10 @@ import { SLOTS, DICE } from "@novamine/shared";
 
 export const gamesRouter = Router();
 
-// ── Slots ────────────────────────────────────────────────────────────────────
 gamesRouter.post("/slots/spin", requireAuth, async (req, res, next) => {
   try {
-    const userId = req.auth!.sub;
+    const userId = (req as any).auth!.sub;
 
-    // Cooldown check
     const { data: lastSpin } = await supabaseAdmin
       .from("slot_spins")
       .select("next_available_at")
@@ -27,7 +24,7 @@ gamesRouter.post("/slots/spin", requireAuth, async (req, res, next) => {
       });
     }
 
-    const outcome = SLOTS.rollOutcome(); // { reels: [s,s,s], reward }
+    const outcome = SLOTS.rollOutcome();
     const cooldownSec =
       Math.floor(Math.random() * (SLOTS.COOLDOWN_MAX_SEC - SLOTS.COOLDOWN_MIN_SEC + 1)) +
       SLOTS.COOLDOWN_MIN_SEC;
@@ -56,12 +53,10 @@ gamesRouter.post("/slots/spin", requireAuth, async (req, res, next) => {
   }
 });
 
-// ── Dice ─────────────────────────────────────────────────────────────────────
 gamesRouter.post("/dice/roll", requireAuth, async (req, res, next) => {
   try {
-    const userId = req.auth!.sub;
+    const userId = (req as any).auth!.sub;
 
-    // Once-per-UTC-day enforcement
     const startOfUtcDay = new Date();
     startOfUtcDay.setUTCHours(0, 0, 0, 0);
 
