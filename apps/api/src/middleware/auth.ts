@@ -1,15 +1,14 @@
 // Auth middleware — extracts Bearer token, verifies it, attaches req.auth.
-import type { Request, Response, NextFunction } from "express";
 import { verifyUserJwt, type NovamineJwtPayload } from "../auth/jwt.js";
 
-declare module "express-serve-static-core" {
-  interface Request {
-    auth?: NovamineJwtPayload;
-  }
+export interface AuthRequest {
+  auth?: NovamineJwtPayload;
+  headers: Record<string, string | string[] | undefined>;
+  [key: string]: any;
 }
 
-export function requireAuth(req: Request, res: Response, next: NextFunction) {
-  const header = req.headers.authorization ?? "";
+export function requireAuth(req: any, res: any, next: any) {
+  const header = (req.headers.authorization as string) ?? "";
   const m = /^Bearer\s+(.+)$/i.exec(header);
   if (!m) {
     return res.status(401).json({ error: "Missing Bearer token" });
