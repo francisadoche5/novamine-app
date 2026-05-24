@@ -1,7 +1,11 @@
-// Server-side Supabase client using the service role key.
-// Bypasses RLS — only used by trusted backend code.
 import { createClient } from "@supabase/supabase-js";
 import { config } from "../config.js";
+import { WebSocket } from "ws";
+
+// Polyfill WebSocket for Node.js 20
+if (!globalThis.WebSocket) {
+  (globalThis as any).WebSocket = WebSocket;
+}
 
 export const supabaseAdmin = createClient(config.supabase.url, config.supabase.serviceRoleKey, {
   auth: {
