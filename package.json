@@ -1,0 +1,29 @@
+{
+  "name": "novamine-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "NovaMine — Telegram Mini App for mining NOVA and earning TON",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:web": "npm --workspace apps/web run dev",
+    "dev:api": "npm --workspace apps/api run dev",
+    "build:web": "npm --workspace apps/web run build",
+    "build:api": "npm --workspace apps/api run build",
+    "build": "npm run build:web && npm run build:api",
+    "lint": "echo \"(lint not configured yet)\"",
+    "typecheck:api": "npm --workspace apps/api run typecheck"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@types/node": "^20.16.10",
+    "@types/express": "^4.17.21",
+    "@types/cors": "^2.8.17",
+    "@types/jsonwebtoken": "^9.0.7",
+    "typescript": "^5.6.2"
+  }
+}
