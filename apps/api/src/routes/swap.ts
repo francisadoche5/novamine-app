@@ -1,6 +1,3 @@
-// POST /swap — convert mined hashes to TON balance.
-// The exchange rate is fixed in shared/constants for now; in v1.1 it can become
-// a config row in Supabase the admin can update.
 import { Router } from "express";
 import { z } from "zod";
 import { requireAuth } from "../middleware/auth.js";
@@ -16,7 +13,7 @@ const Body = z.object({
 swapRouter.post("/", requireAuth, async (req, res, next) => {
   try {
     const { hashes } = Body.parse(req.body);
-    const userId = req.auth!.sub;
+    const userId = (req as any).auth!.sub;
 
     const { data: user, error } = await supabaseAdmin
       .from("users")
@@ -41,7 +38,6 @@ swapRouter.post("/", requireAuth, async (req, res, next) => {
       .single();
     if (upErr) throw upErr;
 
-    // Also log to activity_feed for the live ticker
     await supabaseAdmin.from("activity_feed").insert({
       user_id: userId,
       type: "swap",
