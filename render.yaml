@@ -1,0 +1,42 @@
+# Render blueprint for the NovaMine API + Telegram bot.
+# Apply with: render.com → New → Blueprint → connect this repo.
+#
+# Secrets are NOT stored here — fill them in the Render dashboard after the
+# service is created (Environment tab).
+services:
+  - type: web
+    name: novamine-api
+    runtime: node
+    region: oregon            # change to a region closer to you if you like
+    plan: free                # bump to starter once traffic warrants it
+    rootDir: .                # build from the monorepo root so workspaces resolve
+    branch: main
+    buildCommand: npm install && npm run build:api
+    startCommand: node apps/api/dist/index.js
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "10000"
+      - key: ALLOW_DEV_AUTH
+        value: "false"
+      - key: PUBLIC_API_URL
+        sync: false           # set to your Render URL after first deploy
+      - key: BOT_TOKEN
+        sync: false
+      - key: BOT_USERNAME
+        sync: false
+      - key: TELEGRAM_WEBHOOK_SECRET
+        generateValue: true
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: TON_WALLET_ADDRESS
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false           # e.g. https://your-app.vercel.app

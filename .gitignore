@@ -141,3 +141,22 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+
+# Monorepo / workspaces
+apps/*/dist
+apps/*/build
+apps/*/.vercel
+apps/*/.turbo
+
+# Local Supabase
+supabase/.branches
+supabase/.temp
+.supabase/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+!.vscode/settings.example.json

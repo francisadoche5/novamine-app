@@ -1,0 +1,108 @@
+// Mining endpoints — server-authoritative timing.
+//   POST /mining/start  → opens a session that becomes claimable after MINING_DURATION_MS
+//   POST /mining/claim  → if claimable, credits hashes and closes the session
+//
+// All ad-watch attestation will be added in v1.1; for now we trust the client
+// to have watched the rewarded ad before calling these endpoints.
+import { Router } from "express";
+import { requireAuth } from "../middleware/auth.js";
+import { supabaseAdmin } from "../lib/supabase.js";
+import { MINING } from "@novamine/shared";
+
+export const miningRouter = Router();
+
+miningRouter.post("/start", requireAuth, async (req, res, next) => {
+  try {
+    const userId = req.auth!.sub;
+
+    // Reject if there's an active (unclaimed) session
+    const { data: active } = await supabaseAdmin
+      .from("mining_sessions")
+      .select("id")
+      .eq("user_id", userId)
+      .is("claimed_at", null)
+      .maybeSingle();
+    if (active) {
+      return res.status(409).json({ error: "Mining session already active", sessionId: active.id });
+    }
+
+    const startedAt = new Date();
+    const claimReadyAt = new Date(startedAt.getTime() + MINING.SESSION_DURATION_MS);
+
+    const { data: inserted, error } = await supabaseAdmin
+      .from("mining_sessions")
+      .insert({
+        user_id: userId,
+        started_at: startedAt.toISOString(),
+        claim_ready_at: claimReadyAt.toISOString(),
+      })
+      .select("id, started_at, claim_ready_at")
+      .single();
+    if (error) throw error;
+
+    res.json({
+      sessionId: inserted.id,
+      startedAt: inserted.started_at,
+      claimReadyAt: inserted.claim_ready_at,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+miningRouter.post("/claim", requireAuth, async (req, res, next) => {
+  try {
+    const userId = req.auth!.sub;
+
+    const { data: session, error: selErr } = await supabaseAdmin
+      .from("mining_sessions")
+      .select("id, claim_ready_at, claimed_at")
+      .eq("user_id", userId)
+      .is("claimed_at", null)
+      .order("started_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (selErr) throw selErr;
+
+    if (!session) return res.status(404).json({ error: "No active mining session" });
+    if (new Date(session.claim_ready_at).getTime() > Date.now()) {
+      return res.status(425).json({ error: "Not claimable yet", claimReadyAt: session.claim_ready_at });
+    }
+
+    // Compute payout from the user's mining_power. For v1 we use a flat amount.
+    const { data: user } = await supabaseAdmin
+      .from("users")
+      .select("mining_power, hashes, ton_balance")
+      .eq("id", userId)
+      .single();
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    const power = Number(user.mining_power ?? MINING.DEFAULT_POWER);
+    const hashesEarned = MINING.hashesPerSession(power); // shared helper
+
+    // Update balances atomically via RPC if you have one; for v1 we do two updates.
+    await supabaseAdmin
+      .from("mining_sessions")
+      .update({ claimed_at: new Date().toISOString(), hashes_earned: hashesEarned })
+      .eq("id", session.id);
+
+    const { data: updated, error: upErr } = await supabaseAdmin
+      .from("users")
+      .update({
+        hashes: Number(user.hashes ?? 0) + hashesEarned,
+      })
+      .eq("id", userId)
+      .select("hashes, ton_balance")
+      .single();
+    if (upErr) throw upErr;
+
+    res.json({
+      sessionId: session.id,
+      hashesEarned,
+      hashes: updated.hashes,
+      tonBalance: updated.ton_balance,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
