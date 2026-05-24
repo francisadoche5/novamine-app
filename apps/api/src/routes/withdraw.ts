@@ -1,8 +1,3 @@
-// POST /withdraw — request a TON withdrawal.
-// Both gates (min balance + active referrals) are enforced server-side.
-// v1: creates a `withdrawals` row with status="pending"; admin processes manually
-//     using the configured TON_WALLET_ADDRESS as the source.
-// v1.1: replace manual flow with TonConnect / hot wallet automation.
 import { Router } from "express";
 import { z } from "zod";
 import { requireAuth } from "../middleware/auth.js";
@@ -19,7 +14,7 @@ const Body = z.object({
 withdrawRouter.post("/", requireAuth, async (req, res, next) => {
   try {
     const { amount, walletAddress } = Body.parse(req.body);
-    const userId = req.auth!.sub;
+    const userId = (req as any).auth!.sub;
 
     if (amount < WITHDRAW.MIN_TON) {
       return res.status(400).json({ error: `Minimum withdrawal is ${WITHDRAW.MIN_TON} TON` });
@@ -49,7 +44,6 @@ withdrawRouter.post("/", requireAuth, async (req, res, next) => {
       });
     }
 
-    // Reserve the funds: deduct now, refund on rejection
     const { data: updated, error: upErr } = await supabaseAdmin
       .from("users")
       .update({ ton_balance: Number(user.ton_balance) - amount })
