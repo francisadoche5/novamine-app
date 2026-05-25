@@ -9,7 +9,7 @@
     "preview": "vite preview --port 5173"
   },
   "dependencies": {
-    "@novamine/shared": "*",
+    "@novamine/shared": "file:../../packages/shared",
     "@supabase/supabase-js": "^2.45.4",
     "@telegram-apps/sdk-react": "^2.0.16",
     "react": "^18.3.1",
