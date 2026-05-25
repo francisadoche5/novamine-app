@@ -1,6 +1,6 @@
 {
   "framework": "vite",
-  "buildCommand": "npm run build --workspace=apps/web",
+  "buildCommand": "vite build",
   "installCommand": "npm install",
   "outputDirectory": "dist",
   "rewrites": [
