@@ -287,7 +287,6 @@ export default function NovaMine(){
     return <NovaMineAdmin />;
   }
   const [tab,setTab]=useState("power");
-  const [tab,setTab]=useState("power");
   const [nova,setNova]=useState(1000);       // renamed from power → nova
   const [hashes,setHashes]=useState(6.28182869);
   const [tonBalance,setTonBalance]=useState(0.00009046); // starts at 0 — below min
