@@ -1,5 +1,6 @@
 // NovaMine v4 - circular nav + all NOVA labels - All NOVA labels correct
 import { useState, useEffect, useRef } from "react";
+import NovaMineAdmin from "./pages/admin/index.jsx";
 
 const T = {
   bg:"#080b0f", card:"#0d1117", gold:"#f5c842", goldDim:"#c9a227",
