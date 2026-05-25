@@ -283,6 +283,10 @@ function WithdrawModal({onClose,tonBalance,qualifiedFriends,onGoSwap}){
 
 // ── MAIN APP ──────────────────────────────────────────────────────────────────
 export default function NovaMine(){
+  if (window.location.pathname === "/admin") {
+    return <NovaMineAdmin />;
+  }
+  const [tab,setTab]=useState("power");
   const [tab,setTab]=useState("power");
   const [nova,setNova]=useState(1000);       // renamed from power → nova
   const [hashes,setHashes]=useState(6.28182869);
