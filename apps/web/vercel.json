@@ -1,7 +1,7 @@
 {
   "framework": "vite",
   "buildCommand": "npm --workspaces --include-workspace-root --if-present run build:web",
-  "installCommand": "npm install",
+  "installCommand": "npm install --prefix ../.. && npm install",
   "outputDirectory": "dist",
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
