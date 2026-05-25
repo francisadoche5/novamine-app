@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 
 // ─── CONFIG — no secrets here, everything goes through your Render API ────────
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "https://novamine-api.onrender.com";
 
 // ─── API HELPER ───────────────────────────────────────────────────────────────
 async function adminFetch(path, opts = {}, secret) {
