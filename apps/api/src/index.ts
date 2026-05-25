@@ -17,6 +17,7 @@ import { withdrawRouter } from "./routes/withdraw.js";
 import { shopRouter } from "./routes/shop.js";
 import { referralsRouter } from "./routes/referrals.js";
 import { leaderboardRouter } from "./routes/leaderboard.js";
+import { adminRouter } from "./routes/admin.js";
 import { errorHandler } from "./middleware/error.js";
 import { startBot } from "./bot/index.js";
 
@@ -57,6 +58,7 @@ app.use("/swap", swapRouter);
 app.use("/withdraw", withdrawRouter);
 app.use("/shop", shopRouter);
 app.use("/referrals", referralsRouter);
+app.use("/admin", adminRouter);
 
 app.use(errorHandler);
 
