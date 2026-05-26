@@ -42,3 +42,5 @@ services:
         sync: false
       - key: CORS_ORIGINS
         sync: false           # e.g. https://your-app.vercel.app
+- key: ADMIN_SECRET
+        generateValue: true
