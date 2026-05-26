@@ -397,7 +397,7 @@ export default function NovaMine(){
   const DICE_REWARDS={1:5,2:10,3:15,4:20,5:30,6:50};
 
   function spinSlots(){
-    if(spinning||slotsCooldown>0)return;
+    if(typeof show_11059350==="function"){show_11059350().catch(()=>{});}
     setSpinning(true);setSlotsResult(null);
     let t=0;
     const iv=setInterval(()=>{
@@ -423,7 +423,7 @@ export default function NovaMine(){
   }
 
   function rollDice(){
-    if(rolling||diceUsed)return;
+    if(typeof show_11059350==="function"){show_11059350().catch(()=>{});}
     setRolling(true);setDiceResult(null);
     let t=0;
     const iv=setInterval(()=>{
