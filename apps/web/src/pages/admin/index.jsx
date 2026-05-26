@@ -179,21 +179,23 @@ export default function NovaMineAdmin() {
   return (
     <div style={{ minHeight: "100vh", background: S.bg }}>
       <style>{globalCSS}</style>
-      <div style={{ background: S.card, borderBottom: `1px solid ${S.cardBorder}`, padding: "0 24px", display: "flex", alignItems: "center", gap: 16, height: 60, position: "sticky", top: 0, zIndex: 100 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginRight: 16 }}>
-          <div style={{ width: 32, height: 32, background: `linear-gradient(135deg, ${S.accent}, ${S.gold})`, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>⛏</div>
-          <span style={{ fontWeight: 800, fontSize: 16 }}>NovaMine</span>
-          <Badge color={S.accent}>ADMIN</Badge>
+      <div style={{ background: S.card, borderBottom: `1px solid ${S.cardBorder}`, position: "sticky", top: 0, zIndex: 100 }}>
+        <div style={{ padding: "0 16px", display: "flex", alignItems: "center", justifyContent: "space-between", height: 56 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ width: 32, height: 32, background: `linear-gradient(135deg, ${S.accent}, ${S.gold})`, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>⛏</div>
+            <span style={{ fontWeight: 800, fontSize: 16 }}>NovaMine</span>
+            <Badge color={S.accent}>ADMIN</Badge>
+          </div>
+          <Btn small onClick={logout} color={S.red}>Logout</Btn>
         </div>
-        <div style={{ display: "flex", gap: 4, overflowX: "auto", flex: 1 }}>
+        <div style={{ display: "flex", gap: 4, overflowX: "auto", padding: "0 12px 10px", scrollbarWidth: "none" }}>
           {tabs.map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
-              style={{ background: tab === t.id ? S.accentDim : "transparent", color: tab === t.id ? S.accent : S.mutedLight, border: tab === t.id ? `1px solid ${S.accent}44` : "1px solid transparent", borderRadius: 8, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", transition: "all 0.15s" }}>
+              style={{ background: tab === t.id ? S.accentDim : "transparent", color: tab === t.id ? S.accent : S.mutedLight, border: tab === t.id ? `1px solid ${S.accent}44` : `1px solid ${S.cardBorder}`, borderRadius: 8, padding: "7px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", transition: "all 0.15s", flexShrink: 0 }}>
               {t.icon} {t.label}
             </button>
           ))}
         </div>
-        <Btn small onClick={logout} color={S.red}>Logout</Btn>
       </div>
 
       <div style={{ padding: 24, maxWidth: 1400, margin: "0 auto" }}>
