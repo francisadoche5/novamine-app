@@ -349,19 +349,15 @@ export default function NovaMine(){
 
   // ── REWARDED AD ENGINE ──
   function watchAd(onComplete){
-    setAdProgress(0);
-    setAdSkippable(false);
-    setAdCallback(()=>onComplete);
-    setShowAd(true);
-    let p=0;
-    adTimer.current=setInterval(()=>{
-      p+=2;
-      setAdProgress(p);
-      if(p>=10)setAdSkippable(true);
-      if(p>=100){
-        clearInterval(adTimer.current);
-      }
-    },60);
+    if(typeof show_11059350==="function"){
+      show_11059350().then(()=>{
+        onComplete();
+      }).catch(()=>{
+        onComplete();
+      });
+    } else {
+      onComplete();
+    }
   }
 
   function closeAd(){
