@@ -297,8 +297,14 @@ export default function NovaMine(){
   const [adCallback,setAdCallback]=useState(null);
   const [adProgress,setAdProgress]=useState(0);
   const [adSkippable,setAdSkippable]=useState(false);
-  const [miningActive,setMiningActive]=useState(false);
-  const [claimReady,setClaimReady]=useState(false);
+  // Mining state — persisted in localStorage so it survives page reloads/quit
+  const MINING_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
+  const [miningStartedAt, setMiningStartedAt] = useState(() => {
+    const v = localStorage.getItem("nm_mining_started_at");
+    return v ? Number(v) : null;
+  });
+  const miningActive = miningStartedAt !== null && (Date.now() - miningStartedAt) < MINING_DURATION_MS;
+  const claimReady   = miningStartedAt !== null && (Date.now() - miningStartedAt) >= MINING_DURATION_MS;
   const miningTimer=useRef(null);
   const adTimer=useRef(null);
   const qualifiedFriends=0; // ← correctly 0, nobody invited yet
@@ -314,7 +320,13 @@ export default function NovaMine(){
   const [diceVal,setDiceVal]=useState(6);
   const [rolling,setRolling]=useState(false);
   const [diceResult,setDiceResult]=useState(null);
-  const [diceUsed,setDiceUsed]=useState(false);
+  // Dice state — persisted so rolling once per UTC day survives reloads
+  const [diceUsed,setDiceUsed]=useState(()=>{
+    const v = localStorage.getItem("nm_dice_rolled_date");
+    if (!v) return false;
+    const today = new Date().toISOString().slice(0,10); // "YYYY-MM-DD"
+    return v === today;
+  });
 
   const [tasks,setTasks]=useState([
     {id:1,label:"Join NovaMine Channel",reward:500,done:false,action:"Join"},
@@ -323,11 +335,13 @@ export default function NovaMine(){
     {id:4,label:"Start Partner Bot Beta",reward:500,done:false,action:"Start Bot"},
   ]);
 
-  // Hashes ticker
+  // Hashes ticker + mining countdown re-render
+  const [,forceUpdate]=useState(0);
   useEffect(()=>{
     const iv=setInterval(()=>{
       setHashes(h=>+(h+0.00007243).toFixed(8));
       setTonBalance(b=>+(b+0.000000012).toFixed(11)); // tiny drip so demo works
+      forceUpdate(n=>n+1); // keeps mining countdown live
     },1000);
     return()=>clearInterval(iv);
   },[]);
@@ -346,6 +360,18 @@ export default function NovaMine(){
   },[]);
 
   useEffect(()=>()=>clearInterval(slotTimer.current),[]);
+
+  // On mount, if a mining session is active, schedule a re-render when it becomes claimable
+  useEffect(()=>{
+    if(miningStartedAt !== null){
+      const remaining = MINING_DURATION_MS - (Date.now() - miningStartedAt);
+      if(remaining > 0){
+        miningTimer.current = setTimeout(()=>setMiningStartedAt(t=>t), remaining);
+      }
+    }
+    return ()=>clearTimeout(miningTimer.current);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]);
 
   // ── REWARDED AD ENGINE ──
   function watchAd(onComplete){
@@ -367,21 +393,22 @@ export default function NovaMine(){
   }
 
   function startMining(){
-    // Watch ad first, then start mining
+    // Watch ad first, then start 24h mining session
     watchAd(()=>{
-      setMiningActive(true);
-      setClaimReady(false);
-      // After 6 hours simulate ready to claim (demo: 10s)
+      const now = Date.now();
+      localStorage.setItem("nm_mining_started_at", String(now));
+      setMiningStartedAt(now);
       clearTimeout(miningTimer.current);
-      miningTimer.current=setTimeout(()=>setClaimReady(true),10000);
+      // Schedule UI update when session becomes claimable
+      miningTimer.current=setTimeout(()=>setMiningStartedAt(t=>t), MINING_DURATION_MS);
     });
   }
 
   function claimHashes(){
     // Watch ad before claiming
     watchAd(()=>{
-      setClaimReady(false);
-      setMiningActive(false);
+      localStorage.removeItem("nm_mining_started_at");
+      setMiningStartedAt(null);
       setHashes(h=>+(h+0.00043458).toFixed(8));
       setTonBalance(b=>+(b+0.00006246).toFixed(8));
     });
@@ -430,6 +457,8 @@ export default function NovaMine(){
       setDiceVal(Math.floor(Math.random()*6)+1);t++;
       if(t>=16){clearInterval(iv);
         const f=Math.floor(Math.random()*6)+1;setDiceVal(f);setRolling(false);
+        const today=new Date().toISOString().slice(0,10);
+        localStorage.setItem("nm_dice_rolled_date",today);
         setDiceResult(DICE_REWARDS[f]);setNova(p=>p+DICE_REWARDS[f]);setDiceUsed(true);
       }
     },80);
@@ -579,7 +608,7 @@ export default function NovaMine(){
                     <span style={{fontFamily:"'Orbitron'",fontSize:15,fontWeight:700,color:T.green}}>Mining...</span>
                     <span style={{fontSize:12,color:T.muted}}>session active</span>
                   </div>
-                  <div style={{fontSize:11,color:T.muted,textAlign:"center",marginBottom:10}}>Come back in ~6h to claim your hashes</div>
+                  <div style={{fontSize:11,color:T.muted,textAlign:"center",marginBottom:10}}>{(()=>{const rem=Math.max(0,Math.ceil((MINING_DURATION_MS-(Date.now()-miningStartedAt))/1000));return`Come back in ${formatTime(rem)} to claim your hashes`;})()}</div>
                 </div>
               )}
               {claimReady && (
