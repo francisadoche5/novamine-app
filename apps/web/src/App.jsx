@@ -1,7 +1,9 @@
 // NovaMine v4 - circular nav + all NOVA labels - All NOVA labels correct
 import { useState, useEffect, useRef } from "react";
 import NovaMineAdmin from "./pages/admin/index.jsx";
-import { getTelegramUser } from "./lib/telegram.js";
+import { getTelegramUser, initTelegram } from "./lib/telegram.js";
+import { authenticate } from "./lib/auth.js";
+import { api } from "./lib/api.js";
 
 const T = {
   bg:"#080b0f", card:"#0d1117", gold:"#f5c842", goldDim:"#c9a227",
@@ -291,6 +293,10 @@ export default function NovaMine(){
   const [nova,setNova]=useState(0);          // new users start at 0
   const [hashes,setHashes]=useState(0);      // new users start at 0
   const [tonBalance,setTonBalance]=useState(0); // new users start at 0
+  const [miningPower,setMiningPower]=useState(1000);
+  const [adsEnabled,setAdsEnabled]=useState(false);
+  const [adTriggers,setAdTriggers]=useState({start_mining:false,collect_mining:false,spin_slot:false,dice_roll:false});
+  const [userLoaded,setUserLoaded]=useState(false);
   const [subTab,setSubTab]=useState("slots");
   const [showWithdraw,setShowWithdraw]=useState(false);
   const [showSwap,setShowSwap]=useState(false);
@@ -310,7 +316,47 @@ export default function NovaMine(){
   const adTimer=useRef(null);
   const qualifiedFriends=0; // ← correctly 0, nobody invited yet
 
-  // ── Referral link ────────────────────────────────────────────────────────
+  // ── Load real user data from API on mount ────────────────────────────────
+  useEffect(()=>{
+    (async()=>{
+      try {
+        initTelegram();
+        await authenticate();
+        const data = await api.me();
+        if(data?.user){
+          setNova(Number(data.user.nova ?? 0));
+          setHashes(Number(data.user.hashes ?? 0));
+          setTonBalance(Number(data.user.ton_balance ?? 0));
+          setMiningPower(Number(data.user.mining_power ?? 1000));
+        }
+        // Restore mining session from API if active
+        if(data?.mining?.startedAt){
+          const started = new Date(data.mining.startedAt).getTime();
+          setMiningStartedAt(started);
+          localStorage.setItem("nm_mining_started_at", String(started));
+        }
+      } catch(e){
+        console.warn("Failed to load user data:", e);
+      } finally {
+        setUserLoaded(true);
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]);
+
+  // ── Load ad config from API ───────────────────────────────────────────────
+  useEffect(()=>{
+    fetch(`${import.meta.env.VITE_API_BASE_URL ?? ""}/ad-config-public`)
+      .then(r=>r.ok?r.json():null)
+      .then(cfg=>{
+        if(cfg){
+          setAdsEnabled(!!cfg.adsEnabled);
+          setAdTriggers(cfg.adTriggers ?? {});
+        }
+      })
+      .catch(()=>{});
+  },[]);
+  // ─────────────────────────────────────────────────────────────────────────
   // BOT_USERNAME — can be overridden via VITE_BOT_USERNAME in .env
   const BOT_USERNAME = import.meta.env.VITE_BOT_USERNAME || "NovaMinerVerseBot";
   const tgUser = getTelegramUser();
@@ -416,13 +462,10 @@ export default function NovaMine(){
   },[]);
 
   // ── REWARDED AD ENGINE ──
-  function watchAd(onComplete){
-    if(typeof show_11059350==="function"){
-      show_11059350().then(()=>{
-        onComplete();
-      }).catch(()=>{
-        onComplete();
-      });
+  function watchAd(onComplete, trigger="start_mining"){
+    // Only show ad if master toggle ON and this trigger is enabled
+    if(adsEnabled && adTriggers[trigger] && typeof show_11059350==="function"){
+      show_11059350().then(()=>{ onComplete(); }).catch(()=>{ onComplete(); });
     } else {
       onComplete();
     }
@@ -443,7 +486,7 @@ export default function NovaMine(){
       clearTimeout(miningTimer.current);
       // Schedule UI update when session becomes claimable
       miningTimer.current=setTimeout(()=>setMiningStartedAt(t=>t), MINING_DURATION_MS);
-    });
+    }, "start_mining");
   }
 
   function claimHashes(){
@@ -453,7 +496,7 @@ export default function NovaMine(){
       setMiningStartedAt(null);
       setHashes(h=>+(h+0.00043458).toFixed(8));
       setTonBalance(b=>+(b+0.00006246).toFixed(8));
-    });
+    }, "collect_mining");
   }
 
   const formatTime=s=>{
@@ -466,7 +509,7 @@ export default function NovaMine(){
   const DICE_REWARDS={1:5,2:10,3:15,4:20,5:30,6:50};
 
   function spinSlots(){
-    if(typeof show_11059350==="function"){show_11059350().catch(()=>{});}
+    if(adsEnabled && adTriggers["spin_slot"] && typeof show_11059350==="function"){show_11059350().catch(()=>{});}
     setSpinning(true);setSlotsResult(null);
     let t=0;
     const iv=setInterval(()=>{
@@ -492,7 +535,7 @@ export default function NovaMine(){
   }
 
   function rollDice(){
-    if(typeof show_11059350==="function"){show_11059350().catch(()=>{});}
+    if(adsEnabled && adTriggers["dice_roll"] && typeof show_11059350==="function"){show_11059350().catch(()=>{});}
     setRolling(true);setDiceResult(null);
     let t=0;
     const iv=setInterval(()=>{
