@@ -69,6 +69,10 @@ export const api = {
   // Referrals / team
   referrals: () => request("/referrals"),
 
+  // Update mining power (called automatically when NOVA changes)
+  updateMiningPower: (power) =>
+    request("/me/mining-power", { method: "PATCH", body: { mining_power: power } }),
+
   // Leaderboard (public, no auth)
   leaderboard: () => request("/leaderboard", { auth: false }),
 };
