@@ -325,10 +325,19 @@ export default function NovaMine(){
         await authenticate();
         const data = await api.me();
         if(data?.user){
-          setNova(Number(data.user.nova ?? 0));
-          setHashes(Number(data.user.hashes ?? 0));
-          setTonBalance(Number(data.user.ton_balance ?? 0));
-          setMiningPower(Number(data.user.mining_power ?? 1000));
+          const realNova = Number(data.user.nova ?? 0);
+          const realHashes = Number(data.user.hashes ?? 0);
+          const realTon = Number(data.user.ton_balance ?? 0);
+          // Always recalculate mining power from NOVA — never trust the DB value
+          const realPower = miningPowerFromNova(realNova);
+          setNova(realNova);
+          setHashes(realHashes);
+          setTonBalance(realTon);
+          setMiningPower(realPower);
+          // If DB power is stale/wrong, fix it silently in the background
+          if(realPower !== Number(data.user.mining_power)){
+            api.updateMiningPower(realPower).catch(()=>{});
+          }
         }
         // Restore mining session from API if active
         if(data?.mining?.startedAt){
@@ -511,6 +520,8 @@ export default function NovaMine(){
       localStorage.removeItem("nm_mining_started_at");
       setMiningStartedAt(null);
       setHashes(h=>+(h+earned).toFixed(8));
+      // +1300 NOVA bonus every claim
+      setNova(n=>n+MINING.NOVA_PER_CLAIM);
     }, "collect_mining");
   }
 
