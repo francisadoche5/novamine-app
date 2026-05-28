@@ -85,11 +85,22 @@ miningRouter.post("/claim", requireAuth, async (req, res, next) => {
       .single();
     if (upErr) throw upErr;
 
+    // Award NOVA bonus for every claim — atomic increment so concurrent calls
+    // can't double-credit. The frontend must read this value from the response
+    // rather than calculating it locally.
+    const newNova = await supabaseAdmin.rpc("increment_user_nova", {
+      p_user_id: userId,
+      p_amount: MINING.NOVA_PER_CLAIM,
+    });
+    if (newNova.error) throw newNova.error;
+
     res.json({
       sessionId: session.id,
       hashesEarned,
+      novaEarned: MINING.NOVA_PER_CLAIM,
       hashes: updated.hashes,
       tonBalance: updated.ton_balance,
+      nova: newNova.data,
     });
   } catch (err) {
     next(err);
