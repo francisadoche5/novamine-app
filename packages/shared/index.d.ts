@@ -73,3 +73,13 @@ export interface ReferralMilestone {
   reward: number;
 }
 export const REFERRAL_MILESTONES: readonly ReferralMilestone[];
+
+export interface NovaPowerTier {
+  minNova: number;
+  power: number;
+  label: string;
+}
+export const NOVA_POWER_TIERS: readonly NovaPowerTier[];
+
+export function miningPowerFromNova(nova: number | string): number;
+export function tierFromNova(nova: number | string): NovaPowerTier;
