@@ -1,6 +1,7 @@
 // NovaMine v4 - circular nav + all NOVA labels - All NOVA labels correct
 import { useState, useEffect, useRef } from "react";
 import NovaMineAdmin from "./pages/admin/index.jsx";
+import { getTelegramUser } from "./lib/telegram.js";
 
 const T = {
   bg:"#080b0f", card:"#0d1117", gold:"#f5c842", goldDim:"#c9a227",
@@ -170,7 +171,7 @@ function SwapModal({onClose,hashes,nova}){
 // ── WITHDRAW MODAL ─────────────────────────────────────────────────────────────
 // Step 1: Check if user has ≥ 0.8 TON
 // Step 2: Check referral requirement
-function WithdrawModal({onClose,tonBalance,qualifiedFriends,onGoSwap}){
+function WithdrawModal({onClose,tonBalance,qualifiedFriends,onGoSwap,onInvite}){
   const MIN=0.8;
   const NEEDED=5;
   const hasMin=tonBalance>=MIN;
@@ -271,7 +272,7 @@ function WithdrawModal({onClose,tonBalance,qualifiedFriends,onGoSwap}){
                 You still need <span style={{color:T.gold,fontWeight:700}}>{NEEDED-qualifiedFriends} more active friend{NEEDED-qualifiedFriends!==1?"s":""}</span>. Ask them to mine for 10 days this month to qualify.
               </div>
             </div>
-            <button onClick={onClose} className="btn-gold" style={{width:"100%",padding:14,background:`linear-gradient(135deg,${T.gold},${T.goldDim})`,border:"none",borderRadius:12,fontFamily:"'Rajdhani'",fontWeight:700,fontSize:15,cursor:"pointer",color:"#000",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+            <button onClick={()=>{onClose();onInvite&&onInvite();}} className="btn-gold" style={{width:"100%",padding:14,background:`linear-gradient(135deg,${T.gold},${T.goldDim})`,border:"none",borderRadius:12,fontFamily:"'Rajdhani'",fontWeight:700,fontSize:15,cursor:"pointer",color:"#000",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
               <Icon name="share" size={16}/> Invite Friends Now
             </button>
           </div>
@@ -287,9 +288,9 @@ export default function NovaMine(){
     return <NovaMineAdmin />;
   }
   const [tab,setTab]=useState("power");
-  const [nova,setNova]=useState(1000);       // renamed from power → nova
-  const [hashes,setHashes]=useState(6.28182869);
-  const [tonBalance,setTonBalance]=useState(0.00009046); // starts at 0 — below min
+  const [nova,setNova]=useState(0);          // new users start at 0
+  const [hashes,setHashes]=useState(0);      // new users start at 0
+  const [tonBalance,setTonBalance]=useState(0); // new users start at 0
   const [subTab,setSubTab]=useState("slots");
   const [showWithdraw,setShowWithdraw]=useState(false);
   const [showSwap,setShowSwap]=useState(false);
@@ -308,6 +309,49 @@ export default function NovaMine(){
   const miningTimer=useRef(null);
   const adTimer=useRef(null);
   const qualifiedFriends=0; // ← correctly 0, nobody invited yet
+
+  // ── Referral link ────────────────────────────────────────────────────────
+  // BOT_USERNAME — can be overridden via VITE_BOT_USERNAME in .env
+  const BOT_USERNAME = import.meta.env.VITE_BOT_USERNAME || "NovaMinerVerseBot";
+  const tgUser = getTelegramUser();
+  const myTelegramId = tgUser?.id ?? null;
+  const referralLink = myTelegramId
+    ? `https://t.me/${BOT_USERNAME}/app?startapp=ref_${myTelegramId}`
+    : null;
+
+  const [copiedLink, setCopiedLink] = useState(false);
+
+  function handleShareReferral() {
+    if (!referralLink) return;
+    const tg = window.Telegram?.WebApp;
+    if (tg?.openTelegramLink) {
+      // Opens the Telegram share sheet pre-filled with the referral link
+      const text = encodeURIComponent("Join me on NovaMine and start mining NOVA! 🚀");
+      tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${text}`);
+    } else {
+      // Fallback for desktop/dev: just copy
+      handleCopyLink();
+    }
+  }
+
+  function handleCopyLink() {
+    if (!referralLink) return;
+    navigator.clipboard.writeText(referralLink).then(() => {
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2000);
+    }).catch(() => {
+      // Fallback for older browsers
+      const el = document.createElement("textarea");
+      el.value = referralLink;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand("copy");
+      document.body.removeChild(el);
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2000);
+    });
+  }
+  // ─────────────────────────────────────────────────────────────────────────
 
   const [activities,setActivities]=useState(()=>Array.from({length:6},()=>genActivity()));
 
@@ -335,13 +379,11 @@ export default function NovaMine(){
     {id:4,label:"Start Partner Bot Beta",reward:500,done:false,action:"Start Bot"},
   ]);
 
-  // Hashes ticker + mining countdown re-render
+  // Mining countdown re-render (keeps timer display live)
   const [,forceUpdate]=useState(0);
   useEffect(()=>{
     const iv=setInterval(()=>{
-      setHashes(h=>+(h+0.00007243).toFixed(8));
-      setTonBalance(b=>+(b+0.000000012).toFixed(11)); // tiny drip so demo works
-      forceUpdate(n=>n+1); // keeps mining countdown live
+      forceUpdate(n=>n+1);
     },1000);
     return()=>clearInterval(iv);
   },[]);
@@ -774,12 +816,17 @@ export default function NovaMine(){
                 ))}
               </div>
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                <button className="btn-gold" style={{padding:"13px",background:`linear-gradient(135deg,${T.gold},${T.goldDim})`,color:"#000",border:"none",borderRadius:12,fontFamily:"'Rajdhani'",fontWeight:700,fontSize:15,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8,boxShadow:`0 4px 16px ${T.goldGlow}`}}>
-                  <Icon name="share" size={16}/> Get Referrals
+                <button onClick={handleShareReferral} className="btn-gold" style={{padding:"13px",background:`linear-gradient(135deg,${T.gold},${T.goldDim})`,color:"#000",border:"none",borderRadius:12,fontFamily:"'Rajdhani'",fontWeight:700,fontSize:15,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8,boxShadow:`0 4px 16px ${T.goldGlow}`,opacity:referralLink?1:0.5}}>
+                  <Icon name="share" size={16}/> {referralLink ? "Share Referral Link" : "Loading..."}
                 </button>
-                <button style={{padding:"13px",background:"transparent",border:"1px solid #1e3a1e",color:T.muted,borderRadius:12,fontFamily:"'Rajdhani'",fontWeight:600,fontSize:15,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-                  <Icon name="copy" size={16}/> Copy Link
+                <button onClick={handleCopyLink} style={{padding:"13px",background:copiedLink?"rgba(57,255,138,0.1)":"transparent",border:`1px solid ${copiedLink?T.green:"#1e3a1e"}`,color:copiedLink?T.green:T.muted,borderRadius:12,fontFamily:"'Rajdhani'",fontWeight:600,fontSize:15,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8,transition:"all 0.3s",opacity:referralLink?1:0.5}}>
+                  <Icon name="copy" size={16}/> {copiedLink ? "✓ Link Copied!" : "Copy Referral Link"}
                 </button>
+                {referralLink&&(
+                  <div style={{background:"rgba(0,0,0,0.4)",borderRadius:10,padding:"10px 12px",border:"1px solid #1e2a1e",wordBreak:"break-all",fontSize:11,color:T.muted,fontFamily:"monospace",lineHeight:1.5}}>
+                    {referralLink}
+                  </div>
+                )}
               </div>
             </div>
             <div style={{fontWeight:700,fontSize:12,letterSpacing:2,color:T.muted,fontFamily:"'Orbitron'",marginBottom:12}}>YOUR TEAM</div>
@@ -974,7 +1021,7 @@ export default function NovaMine(){
         </div>
       )}
       {showSwap&&<SwapModal onClose={()=>setShowSwap(false)} hashes={hashes} nova={nova}/>}
-      {showWithdraw&&<WithdrawModal onClose={()=>setShowWithdraw(false)} tonBalance={tonBalance} qualifiedFriends={qualifiedFriends} onGoSwap={()=>setShowSwap(true)}/>}
+      {showWithdraw&&<WithdrawModal onClose={()=>setShowWithdraw(false)} tonBalance={tonBalance} qualifiedFriends={qualifiedFriends} onGoSwap={()=>setShowSwap(true)} onInvite={handleShareReferral}/>}
     </div>
   );
 }
