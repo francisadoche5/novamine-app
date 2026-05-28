@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { miningPowerFromNova } from "@novamine/shared";
 
 // ─── CONFIG — no secrets here, everything goes through your Render API ────────
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "https://novamine-api.onrender.com";
@@ -303,10 +304,12 @@ function UsersPanel({ notify }) {
 
   const saveEdit = async () => {
     try {
-      await adminFetch(`/users/${editUser.id}`, { method: "PATCH", body: { nova: editVals.nova, ton_balance: editVals.ton_balance, mining_power: editVals.mining_power } });
-      notify("User updated");
+      // Auto-calculate correct mining power from the new NOVA value
+      const correctPower = miningPowerFromNova(editVals.nova);
+      await adminFetch(`/users/${editUser.id}`, { method: "PATCH", body: { nova: editVals.nova, ton_balance: editVals.ton_balance, mining_power: correctPower } });
+      setUsers(us => us.map(u => u.id === editUser.id ? { ...u, nova: editVals.nova, ton_balance: editVals.ton_balance, mining_power: correctPower } : u));
       setEditUser(null);
-      load();
+      notify("User updated — mining power auto-set to " + correctPower.toLocaleString());
     } catch (e) { notify(e.message, "error"); }
   };
 
@@ -364,8 +367,10 @@ function UsersPanel({ notify }) {
             <Input value={editVals.nova} onChange={v => setEditVals(p => ({ ...p, nova: v }))} type="number" />
             <label style={{ fontSize: 12, color: S.mutedLight }}>TON Balance</label>
             <Input value={editVals.ton_balance} onChange={v => setEditVals(p => ({ ...p, ton_balance: v }))} type="number" />
-            <label style={{ fontSize: 12, color: S.mutedLight }}>Mining Power</label>
-            <Input value={editVals.mining_power} onChange={v => setEditVals(p => ({ ...p, mining_power: v }))} type="number" />
+            <label style={{ fontSize: 12, color: S.mutedLight }}>Mining Power (auto from NOVA)</label>
+            <div style={{ background: "#080c12", border: "1px solid #1e2a1e", borderRadius: 6, color: "#39ff8a", padding: "7px 12px", fontSize: 13, fontWeight: 700 }}>
+              {Number(miningPowerFromNova(editVals.nova)).toLocaleString()} power
+            </div>
             <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
               <Btn onClick={saveEdit} style={{ flex: 1 }}>Save Changes</Btn>
               <Btn onClick={() => setEditUser(null)} color={S.muted} style={{ flex: 1 }}>Cancel</Btn>
