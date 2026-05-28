@@ -49,6 +49,21 @@ app.get("/health", (_req, res) => res.json({ ok: true, ts: Date.now() }));
 app.use("/auth", authRouter);
 app.use("/leaderboard", leaderboardRouter);
 
+// Public ad-config endpoint (no auth — frontend reads this to know if ads are enabled)
+app.get("/ad-config-public", async (_req, res) => {
+  try {
+    const { supabaseAdmin } = await import("./lib/supabase.js");
+    const { data } = await supabaseAdmin.from("app_config")
+      .select("key,value").in("key", ["ads_enabled", "ad_triggers"]);
+    const cfg: Record<string, any> = {};
+    (data ?? []).forEach((r: any) => { cfg[r.key] = r.value; });
+    res.json({
+      adsEnabled: cfg.ads_enabled ?? false,
+      adTriggers: cfg.ad_triggers ?? { start_mining: false, collect_mining: false, spin_slot: false, dice_roll: false },
+    });
+  } catch { res.json({ adsEnabled: false, adTriggers: {} }); }
+});
+
 // Authenticated routes
 app.use("/me", meRouter);
 app.use("/mining", miningRouter);
