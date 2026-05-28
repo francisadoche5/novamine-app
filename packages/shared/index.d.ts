@@ -4,6 +4,7 @@
 export interface MiningModule {
   readonly SESSION_DURATION_MS: number;
   readonly DEFAULT_POWER: number;
+  readonly NOVA_PER_CLAIM: number;
   hashesPerSession(power: number): number;
   dailyTon(power: number): number;
 }
@@ -57,7 +58,7 @@ export const TASKS: TasksModule;
 
 export interface SwapModule {
   readonly HASH_TO_TON_RATE: number;
-  hashesToTon(hashes: number): number;
+  hashesToTon(hashes: number | string): number;
 }
 export const SWAP: SwapModule;
 
@@ -69,18 +70,14 @@ export interface WithdrawModule {
 export const WITHDRAW: WithdrawModule;
 
 export interface AdminRates {
-  TON_TO_NOVA: number;
-  TON_TO_HASHES: number;
+  readonly TON_TO_NOVA: number;
+  readonly TON_TO_HASHES: number;
   novaFromTon(ton: number | string): number;
   hashesFromTon(ton: number | string): number;
 }
 export const ADMIN_RATES: AdminRates;
 
-export interface SwapConstants {
-  HASH_TO_TON_RATE: number;
-  hashesToTon(hashes: number | string): number;
-}
-export const SWAP: SwapConstants;
+export interface ReferralMilestone {
   count: number;
   reward: number;
 }
