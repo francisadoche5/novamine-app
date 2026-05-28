@@ -4,6 +4,7 @@ import NovaMineAdmin from "./pages/admin/index.jsx";
 import { getTelegramUser, initTelegram } from "./lib/telegram.js";
 import { authenticate } from "./lib/auth.js";
 import { api } from "./lib/api.js";
+import { miningPowerFromNova, tierFromNova, MINING } from "@novamine/shared";
 
 const T = {
   bg:"#080b0f", card:"#0d1117", gold:"#f5c842", goldDim:"#c9a227",
@@ -425,6 +426,19 @@ export default function NovaMine(){
     {id:4,label:"Start Partner Bot Beta",reward:500,done:false,action:"Start Bot"},
   ]);
 
+  // ── Auto-update mining power when NOVA changes ───────────────────────────
+  useEffect(()=>{
+    if(!userLoaded) return; // don't run before initial data is loaded
+    const newPower = miningPowerFromNova(nova);
+    if(newPower !== miningPower){
+      setMiningPower(newPower);
+      // Sync to database so API also uses the updated power
+      api.updateMiningPower(newPower).catch(()=>{});
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[nova, userLoaded]);
+  // ─────────────────────────────────────────────────────────────────────────
+
   // Mining countdown re-render (keeps timer display live)
   const [,forceUpdate]=useState(0);
   useEffect(()=>{
@@ -492,10 +506,11 @@ export default function NovaMine(){
   function claimHashes(){
     // Watch ad before claiming
     watchAd(()=>{
+      const power = miningPowerFromNova(nova);
+      const earned = MINING.hashesPerSession(power);
       localStorage.removeItem("nm_mining_started_at");
       setMiningStartedAt(null);
-      setHashes(h=>+(h+0.00043458).toFixed(8));
-      setTonBalance(b=>+(b+0.00006246).toFixed(8));
+      setHashes(h=>+(h+earned).toFixed(8));
     }, "collect_mining");
   }
 
@@ -634,16 +649,20 @@ export default function NovaMine(){
                     {novaDisplay}
                   </div>
                   {/* Decimal subtle */}
-                  <div style={{fontSize:11,letterSpacing:3,color:T.goldDim,fontFamily:"'Orbitron'",marginTop:4,marginBottom:10}}>NOVA</div>
+                  <div style={{fontSize:11,letterSpacing:3,color:T.goldDim,fontFamily:"'Orbitron'",marginTop:4,marginBottom:6}}>NOVA</div>
+                  {/* Mining tier badge */}
+                  <div style={{fontSize:11,color:T.gold,fontWeight:700,background:"rgba(245,200,66,0.12)",borderRadius:20,padding:"2px 12px",marginBottom:6,fontFamily:"'Rajdhani'"}}>
+                    {tierFromNova(nova).label}
+                  </div>
                   {/* Dollar equivalent */}
                   <div style={{fontSize:13,color:T.muted,marginBottom:6}}>
                     ≈ <span style={{color:T.green,fontWeight:700}}>{tonBalance.toFixed(5)} TON</span>
                   </div>
-                  {/* Daily rate */}
+                  {/* Daily rate — dynamic based on mining power */}
                   <div style={{display:"flex",alignItems:"center",gap:6,background:"rgba(245,200,66,0.08)",borderRadius:20,padding:"4px 14px",marginBottom:10}}>
-                    <span style={{color:T.gold,fontWeight:700,fontSize:13}}>+0.00036</span>
+                    <span style={{color:T.gold,fontWeight:700,fontSize:13}}>+{MINING.hashesPerSession(miningPower).toFixed(8)}</span>
                     <span style={{color:T.gold,fontSize:13}}>⚡</span>
-                    <span style={{color:T.muted,fontSize:12}}>/ day</span>
+                    <span style={{color:T.muted,fontSize:12}}>/ session</span>
                   </div>
                   {/* Referral count */}
                   <div style={{display:"flex",alignItems:"center",gap:6,fontSize:13,color:T.muted}}>
