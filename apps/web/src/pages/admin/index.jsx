@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { miningPowerFromNova } from "@novamine/shared";
+import { miningPowerFromNova, MINING, ADMIN_RATES, SWAP } from "@novamine/shared";
 
 // ─── CONFIG — no secrets here, everything goes through your Render API ────────
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "https://novamine-api.onrender.com";
@@ -304,10 +304,9 @@ function UsersPanel({ notify }) {
 
   const saveEdit = async () => {
     try {
-      // Auto-calculate correct mining power from the new NOVA value
       const correctPower = miningPowerFromNova(editVals.nova);
-      await adminFetch(`/users/${editUser.id}`, { method: "PATCH", body: { nova: editVals.nova, ton_balance: editVals.ton_balance, mining_power: correctPower } });
-      setUsers(us => us.map(u => u.id === editUser.id ? { ...u, nova: editVals.nova, ton_balance: editVals.ton_balance, mining_power: correctPower } : u));
+      await adminFetch(`/users/${editUser.id}`, { method: "PATCH", body: { nova: editVals.nova, ton_balance: editVals.ton_balance, hashes: editVals.hashes ?? 0, mining_power: correctPower } });
+      setUsers(us => us.map(u => u.id === editUser.id ? { ...u, nova: editVals.nova, ton_balance: editVals.ton_balance, hashes: editVals.hashes ?? 0, mining_power: correctPower } : u));
       setEditUser(null);
       notify("User updated — mining power auto-set to " + correctPower.toLocaleString());
     } catch (e) { notify(e.message, "error"); }
@@ -348,13 +347,13 @@ function UsersPanel({ notify }) {
                   <div style={{ fontSize: 10, color: S.muted }}>NOVA</div>
                 </div>
                 <div style={{ textAlign: "center" }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: S.text, fontFamily: "'JetBrains Mono'" }}>{Number(u.mining_power).toLocaleString()}</div>
-                  <div style={{ fontSize: 10, color: S.muted }}>POWER</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: S.text, fontFamily: "'JetBrains Mono'" }}>{MINING.hashesPerSession(miningPowerFromNova(u.nova)).toFixed(8)}</div>
+                  <div style={{ fontSize: 10, color: S.muted }}>HASHES/SESSION</div>
                 </div>
               </div>
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 {isActive(u) && <Badge color={S.green}>ACTIVE</Badge>}
-                <Btn small onClick={() => { setEditUser(u); setEditVals({ nova: u.nova, ton_balance: u.ton_balance, mining_power: u.mining_power }); }}>Edit</Btn>
+                <Btn small onClick={() => { setEditUser(u); setEditVals({ nova: u.nova, ton_balance: u.ton_balance, hashes: u.hashes ?? 0, mining_power: u.mining_power }); }}>Edit</Btn>
               </div>
             </div>
           </Card>
@@ -363,10 +362,20 @@ function UsersPanel({ notify }) {
       {editUser && (
         <Modal title={`Edit: ${editUser.first_name || editUser.username}`} onClose={() => setEditUser(null)}>
           <div style={{ display: "grid", gap: 12 }}>
+            <label style={{ fontSize: 12, color: S.mutedLight }}>TON Balance <span style={{color:"#39ff8a",fontSize:10}}>(auto-fills NOVA & HASHES)</span></label>
+            <Input value={editVals.ton_balance} onChange={v => {
+              const ton = Number(v) || 0;
+              setEditVals(p => ({
+                ...p,
+                ton_balance: v,
+                nova: ton > 0 ? ADMIN_RATES.novaFromTon(ton) : p.nova,
+                hashes: ton > 0 ? ADMIN_RATES.hashesFromTon(ton) : p.hashes,
+              }));
+            }} type="number" />
             <label style={{ fontSize: 12, color: S.mutedLight }}>NOVA Balance</label>
             <Input value={editVals.nova} onChange={v => setEditVals(p => ({ ...p, nova: v }))} type="number" />
-            <label style={{ fontSize: 12, color: S.mutedLight }}>TON Balance</label>
-            <Input value={editVals.ton_balance} onChange={v => setEditVals(p => ({ ...p, ton_balance: v }))} type="number" />
+            <label style={{ fontSize: 12, color: S.mutedLight }}>HASHES</label>
+            <Input value={editVals.hashes ?? 0} onChange={v => setEditVals(p => ({ ...p, hashes: v }))} type="number" />
             <label style={{ fontSize: 12, color: S.mutedLight }}>Mining Power (auto from NOVA)</label>
             <div style={{ background: "#080c12", border: "1px solid #1e2a1e", borderRadius: 6, color: "#39ff8a", padding: "7px 12px", fontSize: 13, fontWeight: 700 }}>
               {Number(miningPowerFromNova(editVals.nova)).toLocaleString()} power
