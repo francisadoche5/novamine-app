@@ -9,7 +9,7 @@ export const MINING = {
   // Default mining power for a brand-new user (1K NOVA tier).
   DEFAULT_POWER: 1000,
   // Hashes earned per claim. Scales linearly with mining_power.
-  // 1K power → 0.00043458 hashes per session (matches your demo).
+  // 1K power → 0.00043458 hashes per session (matches your demo).\
   hashesPerSession(power) {
     const base = 0.00043458; // hashes per 1K power per session
     return +(base * (Number(power) / 1000)).toFixed(8);
@@ -20,6 +20,42 @@ export const MINING = {
     return +((Number(power) / 1000) * perK).toFixed(5);
   },
 };
+
+// ── NOVA → MINING POWER TIERS ────────────────────────────────────────────────
+// NOVA balance automatically determines mining power.
+// Higher NOVA = higher power = more hashes per session.
+// Tiers are checked from highest to lowest — first match wins.
+export const NOVA_POWER_TIERS = [
+  { minNova: 1_000_000, power: 50_000,  label: "⚡ Legendary"  },
+  { minNova:   500_000, power: 25_000,  label: "💎 Elite"      },
+  { minNova:   100_000, power: 10_000,  label: "🔮 Master"     },
+  { minNova:    10_000, power:  5_000,  label: "🌟 Advanced"   },
+  { minNova:     1_000, power:  2_000,  label: "🔥 Rising"     },
+  { minNova:         0, power:  1_000,  label: "🪙 Starter"    },
+];
+
+/**
+ * Returns the mining power for a given NOVA balance.
+ * Called on the frontend (auto-updates UI) and on the API (persists to DB).
+ */
+export function miningPowerFromNova(nova) {
+  const n = Number(nova ?? 0);
+  for (const tier of NOVA_POWER_TIERS) {
+    if (n >= tier.minNova) return tier.power;
+  }
+  return 1000; // fallback
+}
+
+/**
+ * Returns the full tier object for a given NOVA balance.
+ */
+export function tierFromNova(nova) {
+  const n = Number(nova ?? 0);
+  for (const tier of NOVA_POWER_TIERS) {
+    if (n >= tier.minNova) return tier;
+  }
+  return NOVA_POWER_TIERS[NOVA_POWER_TIERS.length - 1];
+}
 
 // ── SLOT MACHINE ─────────────────────────────────────────────────────────────
 export const SLOTS = {
