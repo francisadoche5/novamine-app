@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { requireAuth } from "../middleware/auth.js";
 import { supabaseAdmin } from "../lib/supabase.js";
+import { miningPowerFromNova } from "@novamine/shared";
 
 export const meRouter = Router();
 
@@ -74,6 +75,34 @@ meRouter.get("/", requireAuth, async (req, res, next) => {
         requiredForWithdraw: 5,
       },
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PATCH /me/mining-power — called automatically by the frontend when NOVA changes.
+// Re-calculates the correct power from the user's current NOVA balance in the DB
+// (we don't trust the client value — we re-derive it server-side).
+meRouter.patch("/mining-power", requireAuth, async (req, res, next) => {
+  try {
+    const userId = (req as any).auth!.sub;
+
+    // Fetch current NOVA from DB (source of truth)
+    const { data: user, error } = await supabaseAdmin
+      .from("users")
+      .select("nova")
+      .eq("id", userId)
+      .single();
+    if (error) throw error;
+
+    const correctPower = miningPowerFromNova(user.nova);
+
+    await supabaseAdmin
+      .from("users")
+      .update({ mining_power: correctPower })
+      .eq("id", userId);
+
+    res.json({ mining_power: correctPower });
   } catch (err) {
     next(err);
   }
