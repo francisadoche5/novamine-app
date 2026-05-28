@@ -4,6 +4,7 @@ import NovaMineAdmin from "./pages/admin/index.jsx";
 import { getTelegramUser, initTelegram } from "./lib/telegram.js";
 import { authenticate } from "./lib/auth.js";
 import { api } from "./lib/api.js";
+import { supabase } from "./lib/supabase.js";
 import { miningPowerFromNova, tierFromNova, MINING } from "@novamine/shared";
 
 const T = {
@@ -127,8 +128,8 @@ function SwapModal({onClose,hashes,nova}){
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",zIndex:1000,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
       <div onClick={e=>e.stopPropagation()} style={{background:T.card,border:`1px solid ${T.goldDim}`,borderRadius:"24px 24px 0 0",padding:24,width:"100%",maxWidth:430,animation:"slideUp 0.3s ease",boxShadow:`0 -8px 40px ${T.goldGlow}`}}>
         <div style={{width:40,height:4,background:"#2a2a2a",borderRadius:2,margin:"0 auto 20px"}}/>
-        <div style={{fontFamily:"'Orbitron'",fontWeight:700,fontSize:18,color:T.gold,marginBottom:4}}>SWAP NOVA → TON</div>
-        <div style={{fontSize:13,color:T.muted,marginBottom:20}}>Convert your mined NOVA hashes to TON</div>
+        <div style={{fontFamily:"'Orbitron'",fontWeight:700,fontSize:18,color:T.gold,marginBottom:4}}>SWAP HASHES → TON</div>
+        <div style={{fontSize:13,color:T.muted,marginBottom:20}}>Convert your mined hashes to TON</div>
 
         {/* Rate info */}
         <div style={{background:T.goldFaint,border:`1px solid ${T.goldDim}`,borderRadius:12,padding:14,marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
@@ -165,7 +166,7 @@ function SwapModal({onClose,hashes,nova}){
         <button className="btn-gold shimmer-btn" onClick={onClose} style={{width:"100%",padding:16,border:"none",borderRadius:14,fontFamily:"'Rajdhani'",fontWeight:700,fontSize:16,cursor:"pointer",color:"#000"}}>
           ⚡ Confirm Swap
         </button>
-        <div style={{textAlign:"center",fontSize:11,color:T.muted,marginTop:10}}>You must swap NOVA → TON before withdrawing</div>
+        <div style={{textAlign:"center",fontSize:11,color:T.muted,marginTop:10}}>You must swap HASHES → TON before withdrawing</div>
       </div>
     </div>
   );
@@ -209,7 +210,7 @@ function WithdrawModal({onClose,tonBalance,qualifiedFriends,onGoSwap,onInvite}){
 
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
             <button className="btn-gold" onClick={()=>{onClose();onGoSwap();}} style={{width:"100%",padding:14,background:`linear-gradient(135deg,${T.gold},${T.goldDim})`,border:"none",borderRadius:12,fontFamily:"'Rajdhani'",fontWeight:700,fontSize:15,cursor:"pointer",color:"#000",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-              <Icon name="swap" size={16}/> Swap NOVA → TON
+              <Icon name="swap" size={16}/> Swap HASHES → TON
             </button>
             <button onClick={onClose} style={{width:"100%",padding:12,background:"transparent",border:"1px solid #1e2a1e",borderRadius:12,fontFamily:"'Rajdhani'",fontWeight:600,fontSize:14,cursor:"pointer",color:T.muted}}>
               Keep Mining
@@ -298,6 +299,8 @@ export default function NovaMine(){
   const [adsEnabled,setAdsEnabled]=useState(false);
   const [adTriggers,setAdTriggers]=useState({start_mining:false,collect_mining:false,spin_slot:false,dice_roll:false});
   const [userLoaded,setUserLoaded]=useState(false);
+  const [shopTiers,setShopTiers]=useState([]);
+  const userDbId=useRef(null);
   const [subTab,setSubTab]=useState("slots");
   const [showWithdraw,setShowWithdraw]=useState(false);
   const [showSwap,setShowSwap]=useState(false);
@@ -318,7 +321,8 @@ export default function NovaMine(){
   const qualifiedFriends=0; // ← correctly 0, nobody invited yet
 
   // ── Load real user data from API on mount ────────────────────────────────
-  useEffect(()=>{
+  useEffect(()=>{\
+    let realtimeChannel = null;
     (async()=>{
       try {
         initTelegram();
@@ -334,10 +338,30 @@ export default function NovaMine(){
           setHashes(realHashes);
           setTonBalance(realTon);
           setMiningPower(realPower);
+          userDbId.current = data.user.id;
           // If DB power is stale/wrong, fix it silently in the background
           if(realPower !== Number(data.user.mining_power)){
             api.updateMiningPower(realPower).catch(()=>{});
           }
+
+          // ── Fix 5: Supabase Realtime — push admin balance/shop changes live ──
+          // Requires Realtime enabled on the `users` table in your Supabase project:
+          // Dashboard → Database → Replication → enable `users` table.
+          realtimeChannel = supabase
+            .channel(`user-updates:${data.user.id}`)
+            .on("postgres_changes", {
+              event: "UPDATE",
+              schema: "public",
+              table: "users",
+              filter: `id=eq.${data.user.id}`,
+            }, (payload) => {
+              const u = payload.new;
+              setNova(Number(u.nova ?? 0));
+              setHashes(Number(u.hashes ?? 0));
+              setTonBalance(Number(u.ton_balance ?? 0));
+              setMiningPower(miningPowerFromNova(Number(u.nova ?? 0)));
+            })
+            .subscribe();
         }
         // Restore mining session from API if active
         if(data?.mining?.startedAt){
@@ -345,12 +369,22 @@ export default function NovaMine(){
           setMiningStartedAt(started);
           localStorage.setItem("nm_mining_started_at", String(started));
         }
+
+        // ── Fix 5: Load shop tiers from API so admin price/power edits show live ──
+        try {
+          const shopData = await api.listShopTiers();
+          if(shopData?.tiers?.length) setShopTiers(shopData.tiers);
+        } catch(_) {}
+
       } catch(e){
         console.warn("Failed to load user data:", e);
       } finally {
         setUserLoaded(true);
       }
     })();
+    return () => {
+      if(realtimeChannel) supabase.removeChannel(realtimeChannel);
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
 
@@ -513,15 +547,19 @@ export default function NovaMine(){
   }
 
   function claimHashes(){
-    // Watch ad before claiming
-    watchAd(()=>{
-      const power = miningPowerFromNova(nova);
-      const earned = MINING.hashesPerSession(power);
-      localStorage.removeItem("nm_mining_started_at");
-      setMiningStartedAt(null);
-      setHashes(h=>+(h+earned).toFixed(8));
-      // +1300 NOVA bonus every claim
-      setNova(n=>n+MINING.NOVA_PER_CLAIM);
+    // Watch ad before claiming, then call the real API
+    watchAd(async ()=>{
+      try {
+        const result = await api.claimMining();
+        // Update all balances from server response — nova is now authoritative
+        setHashes(Number(result.hashes));
+        setNova(Number(result.nova));
+        setTonBalance(Number(result.tonBalance));
+        localStorage.removeItem("nm_mining_started_at");
+        setMiningStartedAt(null);
+      } catch(e){
+        console.warn("Claim failed:", e);
+      }
     }, "collect_mining");
   }
 
@@ -580,14 +618,15 @@ export default function NovaMine(){
     setNova(p=>p+(tasks.find(t=>t.id===id)?.reward||0));
   }
 
-  const shopItems=[
-    {power:"1K",   cost:"0.008",daily:"0.00036",month:"0.01080"},
-    {power:"10K",  cost:"0.085",daily:"0.00360",month:"0.10800"},
-    {power:"100K", cost:"0.85", daily:"0.03600",month:"1.08000",hot:true},
-    {power:"500K", cost:"4.25", daily:"0.18000",month:"5.40000"},
-    {power:"1.25M",cost:"8.50", daily:"0.45000",month:"13.5000"},
-    {power:"8.75M",cost:"42.5", daily:"3.15000",month:"94.5000"},
-  ];
+  // ── Fix 5: Shop tiers come from API (loaded on mount) so admin edits reflect live.
+  const displayTiers = shopTiers.map(t => ({
+    id: t.id,
+    power: t.label,
+    cost: String(t.priceTon),
+    daily: typeof t.dailyTon === "number" ? t.dailyTon.toFixed(5) : "—",
+    month: typeof t.monthTon === "number" ? t.monthTon.toFixed(5) : "—",
+    hot: !!t.hot,
+  }));
 
   const leaderboard=[
     {name:"MikeCarterX",   power:"18.4M",daily:"6.62"},
@@ -733,7 +772,7 @@ export default function NovaMine(){
               )}
               <div style={{height:8}}/>
               <button onClick={()=>setShowSwap(true)} className="btn-gold swap-card" style={{width:"100%",padding:"12px",background:`linear-gradient(135deg,rgba(245,200,66,0.1),rgba(245,200,66,0.05))`,border:`1px solid ${T.goldDim}`,borderRadius:10,color:T.gold,fontFamily:"'Rajdhani'",fontWeight:700,fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-                <Icon name="swap" size={16}/> SWAP NOVA → TON
+                <Icon name="swap" size={16}/> SWAP HASHES → TON
               </button>
             </div>
 
@@ -775,7 +814,7 @@ export default function NovaMine(){
             <div onClick={()=>setShowWithdraw(true)} style={{background:"linear-gradient(135deg,#0f1e0f,#0a1a0a)",border:`1px solid ${T.goldDim}`,borderRadius:14,padding:"14px 18px",marginBottom:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
               <div>
                 <div style={{fontFamily:"'Orbitron'",fontSize:12,color:T.gold,fontWeight:700,marginBottom:2}}>WITHDRAW TON</div>
-                <div style={{fontSize:11,color:T.muted}}>Min 0.8 TON · Swap NOVA first · 5 active referrals</div>
+                <div style={{fontSize:11,color:T.muted}}>Min 0.8 TON · Swap HASHES first · 5 active referrals</div>
                 <div style={{marginTop:6,display:"flex",gap:4,alignItems:"center"}}>
                   {[...Array(5)].map((_,i)=>(
                     <div key={i} style={{width:20,height:5,borderRadius:3,background:i<qualifiedFriends?T.gold:"#1e2a1e"}}/>
@@ -796,9 +835,12 @@ export default function NovaMine(){
           <div style={{padding:"20px 16px",animation:"slideUp 0.3s ease"}}>
             <div style={{fontFamily:"'Orbitron'",fontWeight:700,fontSize:18,color:T.gold,marginBottom:4,letterSpacing:2}}>NOVA SHOP</div>
             <div style={{fontSize:14,color:T.muted,marginBottom:20}}>Boost your mining rate with TON</div>
+            {displayTiers.length===0&&(
+              <div style={{textAlign:"center",color:T.muted,padding:40,fontSize:13}}>Loading shop…</div>
+            )}
             <div style={{display:"flex",flexDirection:"column",gap:10}}>
-              {shopItems.map((item,i)=>(
-                <div key={i} className="card-hover" style={{background:T.card,border:`1px solid ${item.hot?T.goldDim:"#1e2a1e"}`,borderRadius:16,padding:16,position:"relative",boxShadow:item.hot?`0 0 24px ${T.goldGlow}`:"none"}}>
+              {displayTiers.map((item,i)=>(
+                <div key={item.id??i} className="card-hover" style={{background:T.card,border:`1px solid ${item.hot?T.goldDim:"#1e2a1e"}`,borderRadius:16,padding:16,position:"relative",boxShadow:item.hot?`0 0 24px ${T.goldGlow}`:"none"}}>
                   {item.hot&&<div style={{position:"absolute",top:-10,right:16,background:`linear-gradient(135deg,${T.gold},${T.goldDim})`,color:"#000",fontSize:10,fontWeight:700,fontFamily:"'Orbitron'",padding:"3px 10px",borderRadius:50,letterSpacing:1}}>BEST VALUE</div>}
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
                     <div style={{display:"flex",alignItems:"center",gap:12}}>
