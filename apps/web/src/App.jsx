@@ -194,11 +194,27 @@ function SwapModal({onClose,hashes,onSwapComplete}){
 // ── WITHDRAW MODAL ─────────────────────────────────────────────────────────────
 // Step 1: Check if user has ≥ 0.8 TON
 // Step 2: Check referral requirement
-function WithdrawModal({onClose,tonBalance,qualifiedFriends,onGoSwap,onInvite}){
+function WithdrawModal({onClose,tonBalance,qualifiedFriends,onGoSwap,onInvite,onWithdrawComplete}){
   const MIN=0.8;
   const NEEDED=5;
   const hasMin=tonBalance>=MIN;
   const hasRefs=qualifiedFriends>=NEEDED;
+  const [walletAddress,setWalletAddress]=useState("");
+  const [withdrawing,setWithdrawing]=useState(false);
+  const [withdrawError,setWithdrawError]=useState(null);
+  const [withdrawDone,setWithdrawDone]=useState(false);
+
+  async function handleWithdraw(){
+    if(!walletAddress.trim()){setWithdrawError("Please enter your TON wallet address.");return;}
+    setWithdrawing(true);setWithdrawError(null);
+    try{
+      await api.requestWithdraw(tonBalance, walletAddress.trim());
+      setWithdrawDone(true);
+      if(onWithdrawComplete)onWithdrawComplete();
+    }catch(e){
+      setWithdrawError(e?.message||"Withdrawal request failed. Please try again.");
+    }finally{setWithdrawing(false);}
+  }
 
   // Step 1 — minimum balance gate
   if(!hasMin){
@@ -284,9 +300,31 @@ function WithdrawModal({onClose,tonBalance,qualifiedFriends,onGoSwap,onInvite}){
         </div>
 
         {hasRefs?(
-          <button className="shimmer-btn btn-gold" style={{width:"100%",padding:16,border:"none",borderRadius:14,fontFamily:"'Rajdhani'",fontWeight:700,fontSize:16,cursor:"pointer",color:"#000"}}>
-            ⚡ Withdraw to Wallet
-          </button>
+          withdrawDone?(
+            <div style={{background:"rgba(57,255,138,0.08)",border:`1px solid ${T.greenDim}`,borderRadius:14,padding:20,textAlign:"center"}}>
+              <div style={{fontSize:32,marginBottom:8}}>✅</div>
+              <div style={{fontFamily:"'Orbitron'",fontWeight:700,fontSize:15,color:T.green,marginBottom:4}}>Request Submitted!</div>
+              <div style={{fontSize:12,color:T.muted}}>Admin will process your withdrawal within 24h.</div>
+            </div>
+          ):(
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+              <div style={{background:"rgba(0,0,0,0.4)",border:"1px solid #1e2a1e",borderRadius:12,padding:14}}>
+                <div style={{fontSize:11,color:T.muted,marginBottom:6,letterSpacing:1}}>YOUR TON WALLET ADDRESS</div>
+                <input
+                  type="text"
+                  placeholder="UQ... or EQ..."
+                  value={walletAddress}
+                  onChange={e=>{setWalletAddress(e.target.value);setWithdrawError(null);}}
+                  style={{width:"100%",background:"transparent",border:"none",outline:"none",fontFamily:"'Rajdhani'",fontSize:14,fontWeight:600,color:T.text}}
+                />
+              </div>
+              {withdrawError&&<div style={{background:"rgba(255,77,77,0.08)",border:"1px solid rgba(255,77,77,0.3)",borderRadius:10,padding:"10px 14px",fontSize:12,color:T.red}}>{withdrawError}</div>}
+              <button className="shimmer-btn btn-gold" onClick={handleWithdraw} disabled={withdrawing||!walletAddress.trim()} style={{width:"100%",padding:16,border:"none",borderRadius:14,fontFamily:"'Rajdhani'",fontWeight:700,fontSize:16,cursor:withdrawing?"not-allowed":"pointer",color:"#000",opacity:(!walletAddress.trim()||withdrawing)?0.7:1}}>
+                {withdrawing?"⏳ Submitting…":"⚡ Withdraw to Wallet"}
+              </button>
+              <div style={{textAlign:"center",fontSize:11,color:T.muted}}>Amount: {tonBalance.toFixed(5)} TON · Processed within 24h</div>
+            </div>
+          )
         ):(
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
             <div style={{background:"rgba(255,77,77,0.06)",border:"1px solid rgba(255,77,77,0.2)",borderRadius:12,padding:14,display:"flex",gap:10,alignItems:"flex-start"}}>
@@ -337,7 +375,7 @@ export default function NovaMine(){
   const claimReady   = miningStartedAt !== null && (Date.now() - miningStartedAt) >= MINING_DURATION_MS;
   const miningTimer=useRef(null);
   const adTimer=useRef(null);
-  const qualifiedFriends=0; // ← correctly 0, nobody invited yet
+  const [qualifiedFriends, setQualifiedFriends] = useState(0);
 
   // ── Load real user data from API on mount ────────────────────────────────
   useEffect(()=>{
@@ -393,6 +431,13 @@ export default function NovaMine(){
         try {
           const shopData = await api.listShopTiers();
           if(shopData?.tiers?.length) setShopTiers(shopData.tiers);
+        } catch(_) {}
+
+        // Load referral count from API
+        try {
+          const refData = await api.referrals();
+          const qualified = (refData?.referrals ?? []).filter((r) => r.qualified).length;
+          setQualifiedFriends(qualified);
         } catch(_) {}
 
       } catch(e){
@@ -607,42 +652,55 @@ export default function NovaMine(){
   function spinSlots(){
     if(adsEnabled && adTriggers["spin_slot"] && typeof show_11059350==="function"){show_11059350().catch(()=>{});}
     setSpinning(true);setSlotsResult(null);
+    // Animate reels while API call runs in background
     let t=0;
     const iv=setInterval(()=>{
       setReels([SYMBOLS[Math.floor(Math.random()*6)],SYMBOLS[Math.floor(Math.random()*6)],SYMBOLS[Math.floor(Math.random()*6)]]);
       t++;
-      if(t>=20){
-        clearInterval(iv);
-        const r=Math.random();let final;
-        if(r<0.12)final=["⚡","⚡","⚡"];
-        else if(r<0.35){const s=SYMBOLS[1+Math.floor(Math.random()*4)];final=[s,s,s];}
-        else{final=[SYMBOLS[Math.floor(Math.random()*6)],SYMBOLS[Math.floor(Math.random()*6)],SYMBOLS[Math.floor(Math.random()*6)]];}
-        setReels(final);setSpinning(false);
-        const combo=final.join("");
-        let earned=SLOT_REWARDS[combo]||0;
-        if(!earned&&(final[0]===final[1]||final[1]===final[2]||final[0]===final[2]))earned=3;
-        setSlotsResult(earned);
-        if(earned>0)setNova(p=>p+earned);
-        let cd=Math.floor(Math.random()*(7200-25+1))+25;
-        setSlotsCooldown(cd);
-        slotTimer.current=setInterval(()=>{cd--;setSlotsCooldown(cd);if(cd<=0)clearInterval(slotTimer.current);},1000);
-      }
+      if(t>=20){clearInterval(iv);}
     },80);
+    // Call the API — server is authoritative for result and nova balance
+    api.spinSlots().then(result=>{
+      const final = result.reels ?? [SYMBOLS[Math.floor(Math.random()*6)],SYMBOLS[Math.floor(Math.random()*6)],SYMBOLS[Math.floor(Math.random()*6)]];
+      setReels(final);setSpinning(false);
+      const earned = result.novaEarned ?? 0;
+      setSlotsResult(earned);
+      // Use server nova value if returned, otherwise add locally
+      if(result.nova!=null) setNova(Number(result.nova));
+      else if(earned>0) setNova(p=>p+earned);
+      const cd = result.cooldownSec ?? Math.floor(Math.random()*(7200-25+1))+25;
+      setSlotsCooldown(cd);
+      slotTimer.current=setInterval(()=>{setSlotsCooldown(s=>{if(s<=1){clearInterval(slotTimer.current);return 0;}return s-1;});},1000);
+    }).catch(e=>{
+      setSpinning(false);
+      console.warn("Spin failed:", e);
+    });
   }
 
   function rollDice(){
     if(adsEnabled && adTriggers["dice_roll"] && typeof show_11059350==="function"){show_11059350().catch(()=>{});}
     setRolling(true);setDiceResult(null);
+    // Animate dice while API call runs
     let t=0;
     const iv=setInterval(()=>{
       setDiceVal(Math.floor(Math.random()*6)+1);t++;
-      if(t>=16){clearInterval(iv);
-        const f=Math.floor(Math.random()*6)+1;setDiceVal(f);setRolling(false);
-        const today=new Date().toISOString().slice(0,10);
-        localStorage.setItem("nm_dice_rolled_date",today);
-        setDiceResult(DICE_REWARDS[f]);setNova(p=>p+DICE_REWARDS[f]);setDiceUsed(true);
-      }
+      if(t>=16){clearInterval(iv);}
     },80);
+    // Call the API — server is authoritative for result and nova balance
+    api.rollDice().then(result=>{
+      const face = result.face ?? Math.floor(Math.random()*6)+1;
+      setDiceVal(face);setRolling(false);
+      const earned = result.novaEarned ?? 0;
+      setDiceResult(earned);
+      if(result.nova!=null) setNova(Number(result.nova));
+      else if(earned>0) setNova(p=>p+earned);
+      const today=new Date().toISOString().slice(0,10);
+      localStorage.setItem("nm_dice_rolled_date",today);
+      setDiceUsed(true);
+    }).catch(e=>{
+      setRolling(false);
+      console.warn("Dice roll failed:", e);
+    });
   }
 
   function claimTask(id){
@@ -1168,7 +1226,7 @@ export default function NovaMine(){
         </div>
       )}
       {showSwap&&<SwapModal onClose={()=>setShowSwap(false)} hashes={hashes} onSwapComplete={(r)=>{if(r?.hashes!=null)setHashes(Number(r.hashes));if(r?.tonBalance!=null)setTonBalance(Number(r.tonBalance));}}/>}
-      {showWithdraw&&<WithdrawModal onClose={()=>setShowWithdraw(false)} tonBalance={tonBalance} qualifiedFriends={qualifiedFriends} onGoSwap={()=>setShowSwap(true)} onInvite={handleShareReferral}/>}
+      {showWithdraw&&<WithdrawModal onClose={()=>setShowWithdraw(false)} tonBalance={tonBalance} qualifiedFriends={qualifiedFriends} onGoSwap={()=>setShowSwap(true)} onInvite={handleShareReferral} onWithdrawComplete={()=>{setTonBalance(0);setShowWithdraw(false);}}/>}
     </div>
   );
 }
