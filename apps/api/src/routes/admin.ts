@@ -203,3 +203,71 @@ adminRouter.patch("/ad-config", requireAdmin, async (req: any, res: any) => {
     res.json({ ok: true });
   } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
+
+// ── Shop Tiers (DB-backed) ────────────────────────────────────────────────── 
+adminRouter.get("/shop-tiers", requireAdmin, async (_req: any, res: any) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("shop_tiers")
+      .select("*")
+      .order("price_ton", { ascending: true });
+    if (error) throw error;
+    res.json(data ?? []);
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+adminRouter.put("/shop-tiers", requireAdmin, async (req: any, res: any) => {
+  try {
+    const { tiers } = req.body; // array of tier objects
+    if (!Array.isArray(tiers)) return res.status(400).json({ error: "tiers must be an array" });
+
+    // Upsert all tiers
+    const rows = tiers.map((t: any) => ({
+      id: t.id,
+      label: t.label,
+      nova_power: Number(t.novaPower),
+      price_ton: Number(t.priceTon),
+      daily_ton: Number(t.dailyTon ?? 0),
+      month_ton: Number(t.monthTon ?? 0),
+      hot: !!t.hot,
+      active: true,
+    }));
+    const { error } = await supabaseAdmin.from("shop_tiers").upsert(rows);
+    if (error) throw error;
+    res.json({ ok: true });
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Tasks (DB-backed) ─────────────────────────────────────────────────────── 
+adminRouter.get("/tasks", requireAdmin, async (_req: any, res: any) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("tasks")
+      .select("*")
+      .order("created_at", { ascending: true });
+    if (error) throw error;
+    res.json(data ?? []);
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+adminRouter.put("/tasks", requireAdmin, async (req: any, res: any) => {
+  try {
+    const { tasks } = req.body;
+    if (!Array.isArray(tasks)) return res.status(400).json({ error: "tasks must be an array" });
+
+    // Mark all existing tasks inactive then upsert
+    await supabaseAdmin.from("tasks").update({ active: false }).neq("id", "");
+    if (tasks.length > 0) {
+      const rows = tasks.map((t: any) => ({
+        id: t.id,
+        label: t.label ?? t.title,
+        reward: Number(t.reward ?? 0),
+        action: t.action ?? "Claim",
+        url: t.url ?? null,
+        active: true,
+      }));
+      await supabaseAdmin.from("tasks").upsert(rows);
+    }
+    res.json({ ok: true });
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
