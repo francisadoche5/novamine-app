@@ -72,17 +72,23 @@ export async function startBot(app: Express) {
   // ── Bootstrap webhook (prod) or long-poll (dev) ──
   if (config.isProd && config.bot.publicUrl) {
     const path = "/telegram/webhook";
+
+    // Telegram only allows A-Za-z0-9_- in the secret token (1–256 chars).
+    // Strip any disallowed characters so a mis-configured env var doesn't crash the bot.
+    const rawSecret = config.bot.webhookSecret || "";
+    const webhookSecret = rawSecret.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 256) || undefined;
+
     app.use(
       path,
       webhookCallback(bot, "express", {
-        secretToken: config.bot.webhookSecret || undefined,
+        secretToken: webhookSecret,
       })
     );
 
     const webhookUrl = `${config.bot.publicUrl.replace(/\/$/, "")}${path}`;
     try {
       await bot.api.setWebhook(webhookUrl, {
-        secret_token: config.bot.webhookSecret || undefined,
+        secret_token: webhookSecret,
         allowed_updates: ["message", "callback_query"],
       });
       console.log(`[bot] webhook set to ${webhookUrl}`);
