@@ -40,13 +40,29 @@ gamesRouter.post("/slots/spin", requireAuth, async (req, res, next) => {
     });
 
     if (outcome.reward > 0) {
-      await supabaseAdmin.rpc("increment_user_nova", { p_user_id: userId, p_amount: outcome.reward });
+      const { error: rpcError } = await supabaseAdmin.rpc("increment_user_nova", {
+        p_user_id: userId,
+        p_amount: outcome.reward,
+      });
+      if (rpcError) {
+        // Fallback: manual increment if RPC doesn't exist yet
+        const { data: user } = await supabaseAdmin.from("users").select("nova").eq("id", userId).single();
+        if (user) {
+          await supabaseAdmin.from("users")
+            .update({ nova: Number(user.nova) + outcome.reward })
+            .eq("id", userId);
+        }
+      }
     }
+
+    // Return updated nova balance so frontend stays in sync
+    const { data: updated } = await supabaseAdmin.from("users").select("nova").eq("id", userId).single();
 
     res.json({
       reels: outcome.reels,
       reward: outcome.reward,
       nextAvailableAt: nextAvailableAt.toISOString(),
+      nova: updated?.nova ?? null,
     });
   } catch (err) {
     next(err);
@@ -79,10 +95,25 @@ gamesRouter.post("/dice/roll", requireAuth, async (req, res, next) => {
     });
 
     if (reward > 0) {
-      await supabaseAdmin.rpc("increment_user_nova", { p_user_id: userId, p_amount: reward });
+      const { error: rpcError } = await supabaseAdmin.rpc("increment_user_nova", {
+        p_user_id: userId,
+        p_amount: reward,
+      });
+      if (rpcError) {
+        // Fallback: manual increment if RPC doesn't exist yet
+        const { data: user } = await supabaseAdmin.from("users").select("nova").eq("id", userId).single();
+        if (user) {
+          await supabaseAdmin.from("users")
+            .update({ nova: Number(user.nova) + reward })
+            .eq("id", userId);
+        }
+      }
     }
 
-    res.json({ value, reward });
+    // Return updated nova balance so frontend stays in sync
+    const { data: updated } = await supabaseAdmin.from("users").select("nova").eq("id", userId).single();
+
+    res.json({ value, reward, nova: updated?.nova ?? null });
   } catch (err) {
     next(err);
   }
