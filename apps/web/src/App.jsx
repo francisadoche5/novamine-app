@@ -6,6 +6,7 @@ import { authenticate } from "./lib/auth.js";
 import { api } from "./lib/api.js";
 import { supabase } from "./lib/supabase.js";
 import { miningPowerFromNova, tierFromNova, MINING } from "@novamine/shared";
+import { useTonConnectUI, useTonAddress, TonConnectButton } from "@tonconnect/ui-react";
 
 const T = {
   bg:"#080b0f", card:"#0d1117", gold:"#f5c842", goldDim:"#c9a227",
@@ -357,6 +358,7 @@ export default function NovaMine(){
   const [adTriggers,setAdTriggers]=useState({start_mining:false,collect_mining:false,spin_slot:false,dice_roll:false});
   const [userLoaded,setUserLoaded]=useState(false);
   const [shopTiers,setShopTiers]=useState([]);
+  const [shopWallet,setShopWallet]=useState("");
   const userDbId=useRef(null);
   const [subTab,setSubTab]=useState("slots");
   const [showWithdraw,setShowWithdraw]=useState(false);
@@ -379,6 +381,9 @@ export default function NovaMine(){
   const [refStats, setRefStats] = useState({total:0, valid:0, pending:0, nova:0});
   const [buyingTierId, setBuyingTierId] = useState(null);
   const [buyError, setBuyError] = useState(null);
+  // TonConnect — wallet for shop purchases
+  const [tonConnectUI] = useTonConnectUI();
+  const tonWalletAddress = useTonAddress();
 
   // ── Load real user data from API on mount ────────────────────────────────
   useEffect(()=>{
@@ -438,19 +443,23 @@ export default function NovaMine(){
           if(data.dice.todayValue != null) setDiceVal(data.dice.todayValue);
         }
 
-        // Sync slots cooldown from server
+        // Sync slots cooldown from server (server is authoritative)
         if(data?.slots?.nextAvailableAt){
-          const remaining = Math.max(0, Math.round((new Date(data.slots.nextAvailableAt).getTime() - Date.now()) / 1000));
+          const nextAt = new Date(data.slots.nextAvailableAt).getTime();
+          const remaining = Math.max(0, Math.round((nextAt - Date.now()) / 1000));
+          localStorage.setItem("nm_slot_cooldown_until", String(nextAt));
           if(remaining > 0){
             setSlotsCooldown(remaining);
-            slotTimer.current = setInterval(()=>{setSlotsCooldown(s=>{if(s<=1){clearInterval(slotTimer.current);return 0;}return s-1;});},1000);
+            clearInterval(slotTimer.current);
+            slotTimer.current = setInterval(()=>{setSlotsCooldown(s=>{if(s<=1){clearInterval(slotTimer.current);localStorage.removeItem("nm_slot_cooldown_until");return 0;}return s-1;});},1000);
           }
         }
 
-        // ── Fix 5: Load shop tiers from API so admin price/power edits show live ──
+        // ── Load shop tiers from API — no auth required, always runs ──
         try {
           const shopData = await api.listShopTiers();
           if(shopData?.tiers?.length) setShopTiers(shopData.tiers);
+          if(shopData?.walletAddress) setShopWallet(shopData.walletAddress);
         } catch(_) {}
 
         // Load tasks from API
@@ -485,6 +494,7 @@ export default function NovaMine(){
 
       } catch(e){
         console.warn("Failed to load user data:", e);
+        setTasksLoading(false); // ensure tasks stop showing spinner on auth failure
       } finally {
         setUserLoaded(true);
       }
@@ -496,6 +506,12 @@ export default function NovaMine(){
   },[]);
 
   // ── Load ad config from API ───────────────────────────────────────────────
+  // Also load shop tiers independently so they show even if auth is slow
+  useEffect(()=>{
+    api.listShopTiers().then(d=>{ if(d?.tiers?.length) setShopTiers(d.tiers); if(d?.walletAddress) setShopWallet(d.walletAddress); }).catch(()=>{});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]);
+
   useEffect(()=>{
     fetch(`${import.meta.env.VITE_API_BASE_URL ?? ""}/ad-config-public`)
       .then(r=>r.ok?r.json():null)
@@ -555,7 +571,12 @@ export default function NovaMine(){
   const [reels,setReels]=useState(["⚡","⚡","⚡"]);
   const [spinning,setSpinning]=useState(false);
   const [slotsResult,setSlotsResult]=useState(null);
-  const [slotsCooldown,setSlotsCooldown]=useState(0);
+  const [slotsCooldown,setSlotsCooldown]=useState(()=>{
+    const until=localStorage.getItem("nm_slot_cooldown_until");
+    if(!until) return 0;
+    const remaining=Math.max(0,Math.round((Number(until)-Date.now())/1000));
+    return remaining;
+  });
   const slotTimer=useRef(null);
 
   const [diceVal,setDiceVal]=useState(6);
@@ -715,7 +736,10 @@ export default function NovaMine(){
         cd = result.cooldownSec ?? Math.floor(Math.random()*(7200-25+1))+25;
       }
       setSlotsCooldown(cd);
-      slotTimer.current=setInterval(()=>{setSlotsCooldown(s=>{if(s<=1){clearInterval(slotTimer.current);return 0;}return s-1;});},1000);
+      const cooldownUntil = Date.now() + cd * 1000;
+      localStorage.setItem("nm_slot_cooldown_until", String(cooldownUntil));
+      clearInterval(slotTimer.current);
+      slotTimer.current=setInterval(()=>{setSlotsCooldown(s=>{if(s<=1){clearInterval(slotTimer.current);localStorage.removeItem("nm_slot_cooldown_until");return 0;}return s-1;});},1000);
     }).catch(e=>{
       setSpinning(false);
       console.warn("Spin failed:", e);
@@ -765,23 +789,48 @@ export default function NovaMine(){
     }
   }
 
-  // ── Shop: buy a tier — opens Telegram payment or falls back to txHash prompt ──
+  // ── Shop: buy a tier via TonConnect wallet ───────────────────────────────
   async function handleBuyTier(tier){
-    if(buyingTierId) return; // prevent double-tap
+    if(buyingTierId) return;
     setBuyError(null);
-    // Ask user for their TON transaction hash after they send payment manually
-    const txHash = window.prompt(
-      `Send ${tier.cost} TON to:\n${import.meta.env.VITE_TON_WALLET_ADDRESS ?? "wallet address not configured"}\n\nPaste your transaction hash here after sending:`
-    );
-    if(!txHash || !txHash.trim()) return;
+
+    // If wallet not connected, open connect dialog
+    if(!tonWalletAddress){
+      try { await tonConnectUI.connectWallet(); } catch(_){}
+      return; // user will click Buy again after connecting
+    }
+
     setBuyingTierId(tier.id);
     try {
-      const result = await api.buyShopTier(tier.id, txHash.trim());
-      if(result?.nova != null) setNova(Number(result.nova));
-      if(result?.miningPower != null) setMiningPower(Number(result.miningPower));
-      alert(`✅ Purchase submitted! Your NOVA boost will be applied after admin confirms your payment.`);
-    } catch(e) {
-      setBuyError(e?.message ?? "Purchase failed. Please try again.");
+      // Convert TON price → nanotons (1 TON = 1_000_000_000 nanoton)
+      const nanotons = BigInt(Math.round(Number(tier.cost) * 1_000_000_000)).toString();
+      // Receiving wallet comes from the shop API response (stored in shopWallet state)
+      const receiverWallet = shopWallet || import.meta.env.VITE_TON_WALLET_ADDRESS || "";
+      if(!receiverWallet){
+        setBuyError("Wallet address not configured. Please contact support.");
+        return;
+      }
+
+      const result = await tonConnectUI.sendTransaction({
+        validUntil: Math.floor(Date.now() / 1000) + 300, // 5-min window
+        messages: [{
+          address: receiverWallet,
+          amount: nanotons,
+          // Base64 payload identifies the purchase (tier + user)
+          payload: btoa(`novamiine:${tier.id}:${userDbId.current ?? "unknown"}`),
+        }],
+      });
+
+      // Submit the boc (transaction bag-of-cells) as proof to our API
+      const txHash = result.boc;
+      const purchase = await api.buyShopTier(tier.id, txHash);
+      alert(`✅ Payment sent! Purchase ID: ${purchase.purchaseId}\nYour NOVA boost will be applied after admin confirms (~24h).`);
+    } catch(e){
+      if(e?.message?.includes("User declined") || e?.message?.includes("Cancel")){
+        // user cancelled in wallet — no error needed
+      } else {
+        setBuyError(e?.message ?? "Transaction failed. Please try again.");
+      }
     } finally {
       setBuyingTierId(null);
     }
@@ -1003,7 +1052,11 @@ export default function NovaMine(){
         {tab==="shop"&&(
           <div style={{padding:"20px 16px",animation:"slideUp 0.3s ease"}}>
             <div style={{fontFamily:"'Orbitron'",fontWeight:700,fontSize:18,color:T.gold,marginBottom:4,letterSpacing:2}}>NOVA SHOP</div>
-            <div style={{fontSize:14,color:T.muted,marginBottom:20}}>Boost your mining rate with TON</div>
+            <div style={{fontSize:14,color:T.muted,marginBottom:12}}>Boost your mining rate with TON</div>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16,padding:"10px 14px",background:T.card,borderRadius:12,border:`1px solid ${T.goldDim}`}}>
+              <div style={{fontSize:12,color:T.muted}}>{tonWalletAddress?`Wallet: ${tonWalletAddress.slice(0,6)}…${tonWalletAddress.slice(-4)}`:"Connect wallet to buy"}</div>
+              <TonConnectButton style={{height:32}}/>
+            </div>
             {displayTiers.length===0&&(
               <div style={{textAlign:"center",color:T.muted,padding:40,fontSize:13}}>Loading shop…</div>
             )}
