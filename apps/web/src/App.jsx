@@ -321,7 +321,7 @@ export default function NovaMine(){
   const qualifiedFriends=0; // ← correctly 0, nobody invited yet
 
   // ── Load real user data from API on mount ────────────────────────────────
-  useEffect(()=>{\
+  useEffect(()=>{
     let realtimeChannel = null;
     (async()=>{
       try {
