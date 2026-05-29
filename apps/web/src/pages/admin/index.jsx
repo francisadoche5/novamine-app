@@ -391,27 +391,57 @@ function UsersPanel({ notify }) {
   );
 }
 
-// ─── SHOP (local config editor) ───────────────────────────────────────────────
+// ─── SHOP (DB-backed editor — saves live to the database) ─────────────────────
 const DEFAULT_TIERS = [
-  { id: "tier_1k",    label: "1K",    novaPower:    1000, priceTon: 0.008, hot: false },
-  { id: "tier_10k",   label: "10K",   novaPower:   10000, priceTon: 0.085, hot: false },
-  { id: "tier_100k",  label: "100K",  novaPower:  100000, priceTon: 0.85,  hot: true  },
-  { id: "tier_500k",  label: "500K",  novaPower:  500000, priceTon: 4.25,  hot: false },
-  { id: "tier_1_25m", label: "1.25M", novaPower: 1250000, priceTon: 8.5,   hot: false },
-  { id: "tier_8_75m", label: "8.75M", novaPower: 8750000, priceTon: 42.5,  hot: false },
+  { id: "tier_1k",    label: "1K",    novaPower:    1000, priceTon: 0.5,  hot: false },
+  { id: "tier_10k",   label: "10K",   novaPower:   10000, priceTon: 1.0,  hot: false },
+  { id: "tier_100k",  label: "100K",  novaPower:  100000, priceTon: 3.0,  hot: true  },
+  { id: "tier_500k",  label: "500K",  novaPower:  500000, priceTon: 8.0,  hot: false },
+  { id: "tier_1_25m", label: "1.25M", novaPower: 1250000, priceTon: 20.0, hot: false },
+  { id: "tier_8_75m", label: "8.75M", novaPower: 8750000, priceTon: 80.0, hot: false },
 ];
 
 function ShopPanel({ notify }) {
   const [tiers, setTiers] = useState(DEFAULT_TIERS);
   const [editing, setEditing] = useState(null);
   const [editVals, setEditVals] = useState({});
+  const [saving, setSaving] = useState(false);
 
-  const save = (updated) => { setTiers(updated); notify("Saved — update packages/shared/index.js to go live"); };
-  const applyEdit = () => { save(tiers.map(t => t.id === editing ? { ...editVals, novaPower: Number(editVals.novaPower), priceTon: Number(editVals.priceTon) } : t)); setEditing(null); };
+  // Load current tiers from DB on mount
+  useEffect(() => {
+    adminFetch("/shop-tiers").then(data => {
+      if (Array.isArray(data) && data.length > 0) {
+        setTiers(data.map(t => ({
+          id: t.id, label: t.label,
+          novaPower: Number(t.nova_power ?? t.novaPower),
+          priceTon: Number(t.price_ton ?? t.priceTon),
+          hot: !!t.hot,
+        })));
+      }
+    }).catch(() => {});
+  }, []);
+
+  const saveToDb = async (updated) => {
+    setSaving(true);
+    try {
+      await adminFetch("/shop-tiers", { method: "PUT", body: { tiers: updated } });
+      setTiers(updated);
+      notify("✅ Shop tiers saved — live in the app immediately!");
+    } catch (e) { notify(e.message, "error"); }
+    finally { setSaving(false); }
+  };
+
+  const applyEdit = () => {
+    const updated = tiers.map(t => t.id === editing
+      ? { ...editVals, novaPower: Number(editVals.novaPower), priceTon: Number(editVals.priceTon) }
+      : t);
+    saveToDb(updated);
+    setEditing(null);
+  };
 
   return (
     <div className="fade-in">
-      <SectionHeader icon="🏪" title="Shop Manager" sub="Edit tiers — apply changes to packages/shared/index.js to go live" />
+      <SectionHeader icon="🏪" title="Shop Manager" sub="Changes save directly to the database — live in the app instantly" />
       <div style={{ display: "grid", gap: 12 }}>
         {tiers.map(t => (
           <Card key={t.id} style={{ padding: "14px 18px" }}>
@@ -440,12 +470,12 @@ function ShopPanel({ notify }) {
   );
 }
 
-// ─── TASKS (local config editor) ─────────────────────────────────────────────
+// ─── TASKS (DB-backed editor — saves live to the database) ───────────────────
 const DEFAULT_TASKS = [
-  { id: "join_channel",        label: "Join NovaMine Channel",   reward: 500,  action: "Join",     url: "https://t.me/NovaMineChannel", maxCompletions: 0 },
-  { id: "join_chat",           label: "Join Community Chat",     reward: 500,  action: "Claim",    url: "https://t.me/NovaMineChat",    maxCompletions: 0 },
-  { id: "start_partner_alpha", label: "Start Partner Bot Alpha", reward: 1000, action: "Start Bot",url: "https://t.me/PartnerAlphaBot", maxCompletions: 0 },
-  { id: "start_partner_beta",  label: "Start Partner Bot Beta",  reward: 500,  action: "Start Bot",url: "https://t.me/PartnerBetaBot",  maxCompletions: 50 },
+  { id: "join_channel",        label: "Join NovaMine Channel",   reward: 500,  action: "Join",     url: "https://t.me/NovaMineChannel" },
+  { id: "join_chat",           label: "Join Community Chat",     reward: 500,  action: "Claim",    url: "https://t.me/NovaMineChat"    },
+  { id: "start_partner_alpha", label: "Start Partner Bot Alpha", reward: 1000, action: "Start Bot",url: "https://t.me/PartnerAlphaBot"  },
+  { id: "start_partner_beta",  label: "Start Partner Bot Beta",  reward: 500,  action: "Start Bot",url: "https://t.me/PartnerBetaBot"   },
 ];
 
 function TasksPanel({ notify }) {
@@ -454,14 +484,37 @@ function TasksPanel({ notify }) {
   const [editVals, setEditVals] = useState({});
   const [showNew, setShowNew] = useState(false);
   const [newTask, setNewTask] = useState({});
+  const [saving, setSaving] = useState(false);
 
-  const save = (updated) => { setTasks(updated); notify("Saved — update packages/shared/index.js to go live"); };
-  const applyEdit = () => { save(tasks.map(t => t.id === editing ? { ...t, ...editVals, reward: Number(editVals.reward), maxCompletions: Number(editVals.maxCompletions || 0) } : t)); setEditing(null); };
-  const addTask = () => { save([...tasks, { id: `task_${Date.now()}`, ...newTask, reward: Number(newTask.reward), maxCompletions: Number(newTask.maxCompletions || 0) }]); setShowNew(false); setNewTask({}); };
+  // Load tasks from DB on mount
+  useEffect(() => {
+    adminFetch("/tasks").then(data => {
+      if (Array.isArray(data) && data.length > 0) {
+        setTasks(data.map(t => ({
+          id: t.id, label: t.label ?? t.title,
+          reward: Number(t.reward ?? t.nova_reward ?? 0),
+          action: t.action ?? "Claim", url: t.url ?? "",
+        })));
+      }
+    }).catch(() => {});
+  }, []);
+
+  const saveToDb = async (updated) => {
+    setSaving(true);
+    try {
+      await adminFetch("/tasks", { method: "PUT", body: { tasks: updated } });
+      setTasks(updated);
+      notify("✅ Tasks saved — live in the app immediately!");
+    } catch (e) { notify(e.message, "error"); }
+    finally { setSaving(false); }
+  };
+
+  const applyEdit = () => { saveToDb(tasks.map(t => t.id === editing ? { ...t, ...editVals, reward: Number(editVals.reward) } : t)); setEditing(null); };
+  const addTask = () => { saveToDb([...tasks, { id: `task_${Date.now()}`, ...newTask, reward: Number(newTask.reward) }]); setShowNew(false); setNewTask({}); };
 
   return (
     <div className="fade-in">
-      <SectionHeader icon="📋" title="Tasks Manager" sub="Add/remove tasks, set rewards and caps" />
+      <SectionHeader icon="📋" title="Tasks Manager" sub="Changes save directly to the database — live in the app instantly" />
       <div style={{ display: "grid", gap: 10, marginBottom: 20 }}>
         {tasks.map(t => (
           <Card key={t.id} style={{ padding: "14px 18px" }}>
@@ -486,7 +539,7 @@ function TasksPanel({ notify }) {
                 </div>
                 <div style={{ display: "flex", gap: 8 }}>
                   <Btn small onClick={() => { setEditing(t.id); setEditVals({ ...t }); }}>Edit</Btn>
-                  <Btn small danger onClick={() => save(tasks.filter(x => x.id !== t.id))}>Remove</Btn>
+                  <Btn small danger onClick={() => saveToDb(tasks.filter(x => x.id !== t.id))}>Remove</Btn>
                 </div>
               </div>
             )}
