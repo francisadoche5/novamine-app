@@ -366,7 +366,7 @@ export default function NovaMine(){
   const [adProgress,setAdProgress]=useState(0);
   const [adSkippable,setAdSkippable]=useState(false);
   // Mining state — persisted in localStorage so it survives page reloads/quit
-  const MINING_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
+  const MINING_DURATION_MS = 6 * 60 * 60 * 1000; // 6 hours — must match MINING.SESSION_DURATION_MS in shared
   const [miningStartedAt, setMiningStartedAt] = useState(() => {
     const v = localStorage.getItem("nm_mining_started_at");
     return v ? Number(v) : null;
@@ -376,6 +376,9 @@ export default function NovaMine(){
   const miningTimer=useRef(null);
   const adTimer=useRef(null);
   const [qualifiedFriends, setQualifiedFriends] = useState(0);
+  const [refStats, setRefStats] = useState({total:0, valid:0, pending:0, nova:0});
+  const [buyingTierId, setBuyingTierId] = useState(null);
+  const [buyError, setBuyError] = useState(null);
 
   // ── Load real user data from API on mount ────────────────────────────────
   useEffect(()=>{
@@ -427,6 +430,23 @@ export default function NovaMine(){
           localStorage.setItem("nm_mining_started_at", String(started));
         }
 
+        // Sync dice used state from server (overrides localStorage)
+        if(data?.dice?.todayRolled){
+          const today = new Date().toISOString().slice(0,10);
+          localStorage.setItem("nm_dice_rolled_date", today);
+          setDiceUsed(true);
+          if(data.dice.todayValue != null) setDiceVal(data.dice.todayValue);
+        }
+
+        // Sync slots cooldown from server
+        if(data?.slots?.nextAvailableAt){
+          const remaining = Math.max(0, Math.round((new Date(data.slots.nextAvailableAt).getTime() - Date.now()) / 1000));
+          if(remaining > 0){
+            setSlotsCooldown(remaining);
+            slotTimer.current = setInterval(()=>{setSlotsCooldown(s=>{if(s<=1){clearInterval(slotTimer.current);return 0;}return s-1;});},1000);
+          }
+        }
+
         // ── Fix 5: Load shop tiers from API so admin price/power edits show live ──
         try {
           const shopData = await api.listShopTiers();
@@ -436,13 +456,15 @@ export default function NovaMine(){
         // Load tasks from API
         try {
           const taskData = await api.listTasks();
-          if(Array.isArray(taskData)){
-            setTasks(taskData.map(t=>({
+          // API returns { tasks: [...] } — each item has done flag from server
+          const taskList = taskData?.tasks ?? (Array.isArray(taskData) ? taskData : []);
+          if(taskList.length >= 0){
+            setTasks(taskList.map(t=>({
               id: t.id,
               label: t.title ?? t.label ?? "Task",
               reward: Number(t.nova_reward ?? t.reward ?? 0),
-              done: !!t.claimed,
-              action: t.action_label ?? "Claim",
+              done: !!t.done,
+              action: t.action_label ?? t.action ?? "Claim",
               url: t.url ?? null,
             })));
           }
@@ -451,8 +473,14 @@ export default function NovaMine(){
         // Load referral count from API
         try {
           const refData = await api.referrals();
-          const qualified = (refData?.referrals ?? []).filter((r) => r.qualified).length;
+          // API returns { total, qualified, pending, requiredForWithdraw, list }
+          const qualified = refData?.qualified ?? 0;
           setQualifiedFriends(qualified);
+          const total   = refData?.total ?? 0;
+          const pending = refData?.pending ?? 0;
+          const valid   = total - pending;
+          const novaEarned = (refData?.list ?? []).reduce((s,r) => s + Number(r.nova_earned ?? 0), 0);
+          setRefStats({ total, valid, pending, nova: novaEarned });
         } catch(_) {}
 
       } catch(e){
@@ -674,12 +702,18 @@ export default function NovaMine(){
     api.spinSlots().then(result=>{
       const final = result.reels ?? [SYMBOLS[Math.floor(Math.random()*6)],SYMBOLS[Math.floor(Math.random()*6)],SYMBOLS[Math.floor(Math.random()*6)]];
       setReels(final);setSpinning(false);
-      const earned = result.novaEarned ?? 0;
+      // API returns { reels, reward, nextAvailableAt } — reward is the field name
+      const earned = result.reward ?? result.novaEarned ?? 0;
       setSlotsResult(earned);
-      // Use server nova value if returned, otherwise add locally
       if(result.nova!=null) setNova(Number(result.nova));
       else if(earned>0) setNova(p=>p+earned);
-      const cd = result.cooldownSec ?? Math.floor(Math.random()*(7200-25+1))+25;
+      // API returns nextAvailableAt ISO string — derive cooldown seconds from it
+      let cd;
+      if(result.nextAvailableAt){
+        cd = Math.max(0, Math.round((new Date(result.nextAvailableAt).getTime() - Date.now()) / 1000));
+      } else {
+        cd = result.cooldownSec ?? Math.floor(Math.random()*(7200-25+1))+25;
+      }
       setSlotsCooldown(cd);
       slotTimer.current=setInterval(()=>{setSlotsCooldown(s=>{if(s<=1){clearInterval(slotTimer.current);return 0;}return s-1;});},1000);
     }).catch(e=>{
@@ -699,9 +733,10 @@ export default function NovaMine(){
     },80);
     // Call the API — server is authoritative for result and nova balance
     api.rollDice().then(result=>{
-      const face = result.face ?? Math.floor(Math.random()*6)+1;
+      // API returns { value, reward } — value is the dice face, reward is nova earned
+      const face = result.value ?? result.face ?? Math.floor(Math.random()*6)+1;
       setDiceVal(face);setRolling(false);
-      const earned = result.novaEarned ?? 0;
+      const earned = result.reward ?? result.novaEarned ?? 0;
       setDiceResult(earned);
       if(result.nova!=null) setNova(Number(result.nova));
       else if(earned>0) setNova(p=>p+earned);
@@ -727,6 +762,28 @@ export default function NovaMine(){
       // Roll back the optimistic update on failure
       setTasks(ts=>ts.map(t=>t.id===id?{...t,done:false}:t));
       console.warn("Claim task failed:", e);
+    }
+  }
+
+  // ── Shop: buy a tier — opens Telegram payment or falls back to txHash prompt ──
+  async function handleBuyTier(tier){
+    if(buyingTierId) return; // prevent double-tap
+    setBuyError(null);
+    // Ask user for their TON transaction hash after they send payment manually
+    const txHash = window.prompt(
+      `Send ${tier.cost} TON to:\n${import.meta.env.VITE_TON_WALLET_ADDRESS ?? "wallet address not configured"}\n\nPaste your transaction hash here after sending:`
+    );
+    if(!txHash || !txHash.trim()) return;
+    setBuyingTierId(tier.id);
+    try {
+      const result = await api.buyShopTier(tier.id, txHash.trim());
+      if(result?.nova != null) setNova(Number(result.nova));
+      if(result?.miningPower != null) setMiningPower(Number(result.miningPower));
+      alert(`✅ Purchase submitted! Your NOVA boost will be applied after admin confirms your payment.`);
+    } catch(e) {
+      setBuyError(e?.message ?? "Purchase failed. Please try again.");
+    } finally {
+      setBuyingTierId(null);
     }
   }
 
@@ -965,13 +1022,14 @@ export default function NovaMine(){
                         <div style={{fontSize:11,color:T.muted,marginTop:1}}>Daily: <span style={{color:T.green}}>{item.daily} TON</span></div>
                       </div>
                     </div>
-                    <button className="btn-gold" style={{background:`linear-gradient(135deg,${T.gold},${T.goldDim})`,color:"#000",border:"none",borderRadius:10,padding:"10px 14px",fontFamily:"'Orbitron'",fontWeight:700,fontSize:12,cursor:"pointer"}}>
-                      {item.cost} TON
+                    <button className="btn-gold" onClick={()=>handleBuyTier(item)} disabled={!!buyingTierId} style={{background:buyingTierId===item.id?"#1a1a1a":`linear-gradient(135deg,${T.gold},${T.goldDim})`,color:buyingTierId===item.id?T.muted:"#000",border:"none",borderRadius:10,padding:"10px 14px",fontFamily:"'Orbitron'",fontWeight:700,fontSize:12,cursor:buyingTierId?"not-allowed":"pointer",opacity:buyingTierId&&buyingTierId!==item.id?0.6:1}}>
+                      {buyingTierId===item.id?"…":item.cost+" TON"}
                     </button>
                   </div>
                 </div>
               ))}
             </div>
+            {buyError&&<div style={{background:"rgba(255,77,77,0.08)",border:"1px solid rgba(255,77,77,0.3)",borderRadius:10,padding:"10px 14px",marginTop:10,fontSize:12,color:T.red}}>{buyError}</div>}
           </div>
         )}
 
@@ -1035,7 +1093,7 @@ export default function NovaMine(){
                 <div style={{fontSize:11,color:T.muted,marginTop:6}}>Friend must login + mine 10 days/month to count as active</div>
               </div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8,marginBottom:16,background:"rgba(0,0,0,0.3)",borderRadius:10,padding:12}}>
-                {[["0","REFERRED"],["0","VALID"],["0","PENDING"],["0.00","NOVA"]].map(([v,l])=>(
+                {[[String(refStats.total),"REFERRED"],[String(refStats.valid),"VALID"],[String(refStats.pending),"PENDING"],[refStats.nova.toFixed(0),"NOVA"]].map(([v,l])=>(
                   <div key={l} style={{textAlign:"center"}}>
                     <div style={{fontFamily:"'Orbitron'",fontWeight:700,fontSize:15,color:T.gold}}>{v}</div>
                     <div style={{fontSize:9,color:T.muted,letterSpacing:1}}>{l}</div>
