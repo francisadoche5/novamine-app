@@ -120,10 +120,27 @@ function genActivity(){
 }
 
 // ── SWAP MODAL ────────────────────────────────────────────────────────────────
-function SwapModal({onClose,hashes,nova}){
+function SwapModal({onClose,hashes,onSwapComplete}){
   const [amount,setAmount]=useState("");
-  const rate=0.00001440; // NOVA per hash approx
+  const [swapping,setSwapping]=useState(false);
+  const [swapError,setSwapError]=useState(null);
+  const rate=0.00001440;
   const tonOut=amount?(parseFloat(amount)*rate).toFixed(8):"0.00000000";
+
+  async function handleConfirmSwap(){
+    const amountNum=parseFloat(amount);
+    if(!amountNum||amountNum<=0)return;
+    if(amountNum>hashes){setSwapError("Amount exceeds your available hashes.");return;}
+    setSwapping(true);setSwapError(null);
+    try{
+      const result=await api.swap(amountNum);
+      if(onSwapComplete)onSwapComplete(result);
+      onClose();
+    }catch(e){
+      setSwapError(e?.message||"Swap failed. Please try again.");
+    }finally{setSwapping(false);}
+  }
+
   return(
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",zIndex:1000,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
       <div onClick={e=>e.stopPropagation()} style={{background:T.card,border:`1px solid ${T.goldDim}`,borderRadius:"24px 24px 0 0",padding:24,width:"100%",maxWidth:430,animation:"slideUp 0.3s ease",boxShadow:`0 -8px 40px ${T.goldGlow}`}}>
@@ -145,7 +162,7 @@ function SwapModal({onClose,hashes,nova}){
               type="number"
               placeholder="0.00"
               value={amount}
-              onChange={e=>setAmount(e.target.value)}
+              onChange={e=>{setAmount(e.target.value);setSwapError(null);}}
               style={{flex:1,background:"transparent",border:"none",outline:"none",fontFamily:"'Orbitron'",fontSize:22,fontWeight:700,color:T.text,width:"100%"}}
             />
             <button onClick={()=>setAmount(hashes.toFixed(8))} style={{background:T.goldFaint,border:`1px solid ${T.goldDim}`,borderRadius:8,padding:"4px 10px",color:T.gold,fontSize:11,cursor:"pointer",fontFamily:"'Rajdhani'",fontWeight:700}}>MAX</button>
@@ -163,8 +180,10 @@ function SwapModal({onClose,hashes,nova}){
           <div style={{fontSize:11,color:T.muted,marginTop:4}}>TON Network</div>
         </div>
 
-        <button className="btn-gold shimmer-btn" onClick={onClose} style={{width:"100%",padding:16,border:"none",borderRadius:14,fontFamily:"'Rajdhani'",fontWeight:700,fontSize:16,cursor:"pointer",color:"#000"}}>
-          ⚡ Confirm Swap
+        {swapError&&<div style={{background:"rgba(255,77,77,0.08)",border:"1px solid rgba(255,77,77,0.3)",borderRadius:10,padding:"10px 14px",marginBottom:12,fontSize:12,color:T.red}}>{swapError}</div>}
+
+        <button className="btn-gold shimmer-btn" onClick={handleConfirmSwap} disabled={swapping||!amount} style={{width:"100%",padding:16,border:"none",borderRadius:14,fontFamily:"'Rajdhani'",fontWeight:700,fontSize:16,cursor:swapping?"not-allowed":"pointer",color:"#000",opacity:(!amount||swapping)?0.7:1}}>
+          {swapping?"⏳ Swapping…":"⚡ Confirm Swap"}
         </button>
         <div style={{textAlign:"center",fontSize:11,color:T.muted,marginTop:10}}>You must swap HASHES → TON before withdrawing</div>
       </div>
@@ -536,13 +555,26 @@ export default function NovaMine(){
 
   function startMining(){
     // Watch ad first, then start 24h mining session
-    watchAd(()=>{
-      const now = Date.now();
-      localStorage.setItem("nm_mining_started_at", String(now));
-      setMiningStartedAt(now);
-      clearTimeout(miningTimer.current);
-      // Schedule UI update when session becomes claimable
-      miningTimer.current=setTimeout(()=>setMiningStartedAt(t=>t), MINING_DURATION_MS);
+    watchAd(async ()=>{
+      try {
+        const result = await api.startMining();
+        // Use the server's authoritative start time so client and server stay in sync
+        const started = new Date(result.startedAt).getTime();
+        localStorage.setItem("nm_mining_started_at", String(started));
+        setMiningStartedAt(started);
+        clearTimeout(miningTimer.current);
+        const remaining = new Date(result.claimReadyAt).getTime() - Date.now();
+        miningTimer.current = setTimeout(()=>setMiningStartedAt(t=>t), Math.max(0, remaining));
+      } catch(e){
+        // 409 means a session is already active — restore it from localStorage
+        if(e?.status === 409){
+          const now = Date.now();
+          localStorage.setItem("nm_mining_started_at", String(now));
+          setMiningStartedAt(now);
+        } else {
+          console.warn("Start mining failed:", e);
+        }
+      }
     }, "start_mining");
   }
 
@@ -1135,7 +1167,7 @@ export default function NovaMine(){
           </div>
         </div>
       )}
-      {showSwap&&<SwapModal onClose={()=>setShowSwap(false)} hashes={hashes} nova={nova}/>}
+      {showSwap&&<SwapModal onClose={()=>setShowSwap(false)} hashes={hashes} onSwapComplete={(r)=>{if(r?.hashes!=null)setHashes(Number(r.hashes));if(r?.tonBalance!=null)setTonBalance(Number(r.tonBalance));}}/>}
       {showWithdraw&&<WithdrawModal onClose={()=>setShowWithdraw(false)} tonBalance={tonBalance} qualifiedFriends={qualifiedFriends} onGoSwap={()=>setShowSwap(true)} onInvite={handleShareReferral}/>}
     </div>
   );
