@@ -433,6 +433,21 @@ export default function NovaMine(){
           if(shopData?.tiers?.length) setShopTiers(shopData.tiers);
         } catch(_) {}
 
+        // Load tasks from API
+        try {
+          const taskData = await api.listTasks();
+          if(Array.isArray(taskData)){
+            setTasks(taskData.map(t=>({
+              id: t.id,
+              label: t.title ?? t.label ?? "Task",
+              reward: Number(t.nova_reward ?? t.reward ?? 0),
+              done: !!t.claimed,
+              action: t.action_label ?? "Claim",
+              url: t.url ?? null,
+            })));
+          }
+        } catch(_) {} finally { setTasksLoading(false); }
+
         // Load referral count from API
         try {
           const refData = await api.referrals();
@@ -526,12 +541,8 @@ export default function NovaMine(){
     return v === today;
   });
 
-  const [tasks,setTasks]=useState([
-    {id:1,label:"Join NovaMine Channel",reward:500,done:false,action:"Join"},
-    {id:2,label:"Join Community Chat",reward:500,done:true,action:"Claim"},
-    {id:3,label:"Start Partner Bot Alpha",reward:1000,done:false,action:"Start Bot"},
-    {id:4,label:"Start Partner Bot Beta",reward:500,done:false,action:"Start Bot"},
-  ]);
+  const [tasks,setTasks]=useState([]);
+  const [tasksLoading,setTasksLoading]=useState(true);
 
   // ── Auto-update mining power when NOVA changes ───────────────────────────
   useEffect(()=>{
@@ -703,9 +714,20 @@ export default function NovaMine(){
     });
   }
 
-  function claimTask(id){
+  async function claimTask(id){
+    // Optimistically mark as done so UI feels instant
+    const task = tasks.find(t=>t.id===id);
     setTasks(ts=>ts.map(t=>t.id===id?{...t,done:true}:t));
-    setNova(p=>p+(tasks.find(t=>t.id===id)?.reward||0));
+    try{
+      const result = await api.claimTask(id);
+      // Use server nova value if returned
+      if(result?.nova!=null) setNova(Number(result.nova));
+      else if(task?.reward) setNova(p=>p+task.reward);
+    }catch(e){
+      // Roll back the optimistic update on failure
+      setTasks(ts=>ts.map(t=>t.id===id?{...t,done:false}:t));
+      console.warn("Claim task failed:", e);
+    }
   }
 
   // ── Fix 5: Shop tiers come from API (loaded on mount) so admin edits reflect live.
@@ -1122,7 +1144,11 @@ export default function NovaMine(){
 
             <div style={{fontWeight:700,fontSize:11,letterSpacing:2,color:T.muted,fontFamily:"'Orbitron'",marginBottom:10}}>TASK LIST</div>
             <div style={{display:"flex",flexDirection:"column",gap:10}}>
-              {tasks.map(task=>(
+              {tasksLoading?(
+                <div style={{textAlign:"center",color:T.muted,padding:24,fontSize:13}}>Loading tasks…</div>
+              ):tasks.length===0?(
+                <div style={{textAlign:"center",color:T.muted,padding:24,fontSize:13}}>No tasks available right now.</div>
+              ):tasks.map(task=>(
                 <div key={task.id} style={{background:T.card,border:`1px solid ${task.done?"#1e3a1e":"#1e2a1e"}`,borderRadius:14,padding:"13px 16px",display:"flex",alignItems:"center",gap:12,opacity:task.done?0.7:1}}>
                   <div style={{width:38,height:38,borderRadius:10,background:task.done?T.greenDim:T.goldFaint,border:`1px solid ${task.done?T.greenDim:T.goldDim}`,display:"flex",alignItems:"center",justifyContent:"center",color:task.done?T.green:T.gold,flexShrink:0}}>
                     {task.done?<Icon name="check" size={17}/>:<Icon name="tasks" size={17}/>}
@@ -1132,7 +1158,10 @@ export default function NovaMine(){
                     <div style={{fontSize:11,color:T.gold}}>⚡ +{task.reward.toLocaleString()} NOVA</div>
                   </div>
                   {!task.done&&(
-                    <button onClick={()=>claimTask(task.id)} className="btn-gold" style={{padding:"7px 13px",background:`linear-gradient(135deg,${T.gold},${T.goldDim})`,color:"#000",border:"none",borderRadius:8,fontFamily:"'Rajdhani'",fontWeight:700,fontSize:12,cursor:"pointer"}}>{task.action}</button>
+                    <button onClick={()=>{
+                      if(task.url) window.Telegram?.WebApp?.openLink?window.Telegram.WebApp.openLink(task.url):window.open(task.url,"_blank");
+                      claimTask(task.id);
+                    }} className="btn-gold" style={{padding:"7px 13px",background:`linear-gradient(135deg,${T.gold},${T.goldDim})`,color:"#000",border:"none",borderRadius:8,fontFamily:"'Rajdhani'",fontWeight:700,fontSize:12,cursor:"pointer"}}>{task.action}</button>
                   )}
                 </div>
               ))}
