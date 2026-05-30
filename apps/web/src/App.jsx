@@ -685,7 +685,7 @@ export default function NovaMine(){
 
   function claimHashes(){
     // Watch ad before claiming, then call the real API
-    watchAd(async ()=>{\
+    watchAd(async ()=>{
       try {
         const result = await api.claimMining();
         // Update all balances from server response — nova is now authoritative
