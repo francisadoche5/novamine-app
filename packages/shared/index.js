@@ -30,7 +30,7 @@ export const MINING = {
   },
   // Daily TON display (cosmetic only).
   dailyTon(power) {
-    const hashes = MINING.hashesPerSession(power) * 4; // 4 sessions/day
+    const hashes = MINING.hashesPerSession(power) * 1; // 1 session/day (24h session)
     return +(hashes * SWAP.HASH_TO_TON_RATE).toFixed(5);
   },
 };
