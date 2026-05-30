@@ -646,7 +646,9 @@ export default function NovaMine(){
   function watchAd(onComplete, trigger="start_mining"){
     // Only show ad if master toggle ON and this trigger is enabled
     if(adsEnabled && adTriggers[trigger] && typeof show_11059350==="function"){
-      show_11059350().then(()=>{ onComplete(); }).catch(()=>{ onComplete(); });
+      show_11059350()
+        .then(()=> onComplete())   // properly chain so async errors propagate
+        .catch(()=> onComplete()); // if ad fails/skipped, still run action
     } else {
       onComplete();
     }
@@ -684,11 +686,10 @@ export default function NovaMine(){
   }
 
   function claimHashes(){
-    // Watch ad before claiming, then call the real API
     watchAd(async ()=>{
       try {
         const result = await api.claimMining();
-        // Update all balances from server response — nova is now authoritative
+        // Update all balances from server response
         setHashes(Number(result.hashes));
         setNova(Number(result.nova));
         setTonBalance(Number(result.tonBalance));
@@ -696,6 +697,17 @@ export default function NovaMine(){
         setMiningStartedAt(null);
       } catch(e){
         console.warn("Claim failed:", e);
+        if(e?.status===404){
+          // Session no longer exists in DB — clear stale localStorage so UI resets
+          localStorage.removeItem("nm_mining_started_at");
+          setMiningStartedAt(null);
+        } else if(e?.status===425){
+          // Server says not ready yet — session timer mismatch between client and server
+          alert("⏳ Mining not complete yet. Please wait a little longer and try again.");
+        } else {
+          // Generic failure — show message so user knows to retry
+          alert("❌ Claim failed. Please check your connection and try again.");
+        }
       }
     }, "collect_mining");
   }
