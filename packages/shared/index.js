@@ -4,8 +4,8 @@
 
 // ── MINING ───────────────────────────────────────────────────────────────────
 export const MINING = {
-  // Real production duration. Mining session unlocks claim after 6 hours.
-  SESSION_DURATION_MS: 6 * 60 * 60 * 1000,
+  // Real production duration. Mining session unlocks claim after 24 hours (matches Dulce CANDY loop).
+  SESSION_DURATION_MS: 24 * 60 * 60 * 1000,
   // Default mining power for a brand-new user (Starter tier).
   DEFAULT_POWER: 1000,
   // NOVA bonus earned every time a user claims a mining session.
