@@ -368,7 +368,7 @@ export default function NovaMine(){
   const [adProgress,setAdProgress]=useState(0);
   const [adSkippable,setAdSkippable]=useState(false);
   // Mining state — persisted in localStorage so it survives page reloads/quit
-  const MINING_DURATION_MS = 6 * 60 * 60 * 1000; // 6 hours — must match MINING.SESSION_DURATION_MS in shared
+  const MINING_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours — matches Dulce CANDY 24h production loop
   const [miningStartedAt, setMiningStartedAt] = useState(() => {
     const v = localStorage.getItem("nm_mining_started_at");
     return v ? Number(v) : null;
@@ -941,54 +941,99 @@ export default function NovaMine(){
               </div>
             </div>
 
-            {/* Earnings grid below circle */}
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:14}}>
-              {[["DAY","0.00036 TON"],["MONTH","0.01080 TON"],["3 MO","0.03240 TON"]].map(([l,v])=>(
-                <div key={l} style={{background:T.card,borderRadius:12,padding:"10px 6px",textAlign:"center",border:"1px solid rgba(245,200,66,0.12)"}}>
-                  <div style={{fontSize:9,color:T.muted,letterSpacing:2,fontFamily:"'Orbitron'",marginBottom:4}}>{l}</div>
-                  <div style={{fontSize:11,fontWeight:700,color:T.gold}}>{v}</div>
+            {/* ── NOVA display (styled like Dulce CANDY's SUGAR block) ── */}
+            <div style={{background:T.card,border:`1px solid ${T.goldDim}`,borderRadius:16,padding:18,marginBottom:14}}>
+              {/* Big NOVA balance — formatted like CANDY shows "1.0K SUGAR" */}
+              <div style={{textAlign:"center",marginBottom:14}}>
+                <div style={{fontFamily:"'Orbitron'",fontWeight:900,fontSize:38,color:T.gold,textShadow:`0 0 30px ${T.goldGlow}`,lineHeight:1}}>
+                  {nova>=1000000?`${(nova/1000000).toFixed(1)}M`:nova>=1000?`${(nova/1000).toFixed(1)}K`:nova.toLocaleString()}
                 </div>
-              ))}
+                <div style={{fontSize:12,letterSpacing:4,color:T.goldDim,fontFamily:"'Orbitron'",marginTop:4}}>NOVA</div>
+              </div>
+
+              {/* 1H / 1D / 30D rate cards — dynamic based on mining power */}
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:14}}>
+                {(()=>{
+                  const perSession = MINING.hashesPerSession(miningPower);
+                  const perHour  = perSession / 24;
+                  const perDay   = perSession;
+                  const per30d   = perDay * 30;
+                  return [
+                    ["1H",  perHour.toFixed(7)+"…"],
+                    ["1D",  perDay.toFixed(7)+"…"],
+                    ["30D", per30d.toFixed(5)+"…"],
+                  ].map(([label,val])=>(
+                    <div key={label} style={{background:"rgba(245,200,66,0.06)",borderRadius:12,padding:"10px 6px",textAlign:"center",border:`1px solid rgba(245,200,66,0.15)`}}>
+                      <div style={{fontSize:9,color:T.muted,letterSpacing:2,fontFamily:"'Orbitron'",marginBottom:4}}>{label}</div>
+                      <div style={{fontSize:10,fontWeight:700,color:T.gold}}>{val}</div>
+                    </div>
+                  ));
+                })()}
+              </div>
+
+              {/* Add NOVA / Free NOVA — mirrors "Add SUGAR / Free SUGAR" */}
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                <button className="btn-gold" onClick={()=>setTab("shop")} style={{padding:"12px",background:`linear-gradient(135deg,${T.gold},${T.goldDim})`,color:"#000",border:"none",borderRadius:12,fontFamily:"'Rajdhani'",fontWeight:700,fontSize:13,cursor:"pointer",boxShadow:`0 4px 14px ${T.goldGlow}`,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                  ⚡ Add NOVA
+                </button>
+                <button className="btn-gold" onClick={()=>setTab("tasks")} style={{padding:"12px",background:"transparent",border:`1px solid ${T.goldDim}`,color:T.gold,borderRadius:12,fontFamily:"'Rajdhani'",fontWeight:700,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                  🎁 Free NOVA
+                </button>
+              </div>
             </div>
 
-            {/* Action buttons */}
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
-              <button className="btn-gold" onClick={()=>setTab("shop")} style={{padding:"12px",background:`linear-gradient(135deg,${T.gold},${T.goldDim})`,color:"#000",border:"none",borderRadius:12,fontFamily:"'Rajdhani'",fontWeight:700,fontSize:13,cursor:"pointer",boxShadow:`0 4px 14px ${T.goldGlow}`}}>⚡ Add NOVA</button>
-              <button className="btn-gold" onClick={()=>setTab("tasks")} style={{padding:"12px",background:"transparent",border:`1px solid ${T.goldDim}`,color:T.gold,borderRadius:12,fontFamily:"'Rajdhani'",fontWeight:700,fontSize:13,cursor:"pointer"}}>🎁 Free NOVA</button>
-            </div>
-
-            {/* Hashes mined */}
+            {/* ── HASHES MINED card (styled like Dulce CANDY's CANDIES MINED) ── */}
             <div style={{background:T.card,border:"1px solid #1e2a1e",borderRadius:16,padding:18,marginBottom:14}}>
-              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
-                <span style={{color:T.gold}}><Icon name="cpu" size={15}/></span>
-                <span style={{fontSize:10,letterSpacing:3,color:T.muted,fontFamily:"'Orbitron'"}}>HASHES MINED</span>
+              {/* ⭐ HASHES MINED ⭐ badge — mirrors CANDIES MINED badge */}
+              <div style={{display:"flex",alignItems:"center",justifyContent:"center",marginBottom:14}}>
+                <div style={{background:`linear-gradient(135deg,${T.gold},${T.goldDim})`,borderRadius:20,padding:"6px 20px",display:"flex",alignItems:"center",gap:8}}>
+                  <span style={{color:"#000",fontSize:13}}>★</span>
+                  <span style={{fontFamily:"'Orbitron'",fontSize:11,letterSpacing:2,color:"#000",fontWeight:700}}>HASHES MINED</span>
+                  <span style={{color:"#000",fontSize:13}}>★</span>
+                </div>
               </div>
-              <div style={{fontFamily:"'Orbitron'",fontSize:28,fontWeight:700,color:T.green,marginBottom:3,textShadow:"0 0 20px rgba(57,255,138,0.4)"}} key={Math.floor(hashes*100)}>
-                {hashes.toFixed(8)}
+
+              {/* Live accumulating number — ticks up in real-time during session */}
+              <div style={{background:"rgba(245,200,66,0.06)",border:`1px solid rgba(245,200,66,0.15)`,borderRadius:12,padding:"16px",textAlign:"center",marginBottom:14}}>
+                <div style={{fontFamily:"'Orbitron'",fontWeight:900,fontSize:26,color:T.green,textShadow:"0 0 20px rgba(57,255,138,0.5)",lineHeight:1}}>
+                  {(()=>{
+                    if(miningActive && miningStartedAt){
+                      const elapsed  = Date.now() - miningStartedAt;
+                      const progress = Math.min(elapsed / MINING_DURATION_MS, 1);
+                      const live     = hashes + MINING.hashesPerSession(miningPower) * progress;
+                      return live.toFixed(8);
+                    }
+                    return hashes.toFixed(8);
+                  })()}
+                </div>
+                <div style={{fontSize:12,color:T.muted,marginTop:6}}>≈ {tonBalance.toFixed(8)} TON</div>
               </div>
-              <div style={{fontSize:12,color:T.muted,marginBottom:14}}>≈ {tonBalance.toFixed(8)} TON</div>
-              {/* Mining state: idle / active / claim ready */}
+
+              {/* Mining state — idle / active countdown / claim ready */}
               {!miningActive && !claimReady && (
-                <button onClick={startMining} className="btn-gold" style={{width:"100%",padding:"14px",background:`linear-gradient(135deg,${T.gold},${T.goldDim})`,border:"none",borderRadius:12,fontFamily:"'Rajdhani'",fontWeight:700,fontSize:15,cursor:"pointer",color:"#000",display:"flex",alignItems:"center",justifyContent:"center",gap:8,boxShadow:`0 4px 20px ${T.goldGlow}`}}>
-                  ▶ Start Mining · Watch Ad
+                <button onClick={startMining} className="btn-gold" style={{width:"100%",padding:"14px",background:`linear-gradient(135deg,${T.gold},${T.goldDim})`,border:"none",borderRadius:12,fontFamily:"'Rajdhani'",fontWeight:700,fontSize:15,cursor:"pointer",color:"#000",display:"flex",alignItems:"center",justifyContent:"center",gap:8,boxShadow:`0 4px 20px ${T.goldGlow}`,marginBottom:10}}>
+                  ▶ START HASHES PRODUCTION · Watch Ad
                 </button>
               )}
               {miningActive && !claimReady && (
-                <div>
-                  <div style={{background:"rgba(57,255,138,0.06)",border:`1px solid ${T.greenDim}`,borderRadius:10,padding:"10px 14px",display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginBottom:10}}>
-                    <div style={{width:7,height:7,borderRadius:"50%",background:T.green,animation:"pulse 1s ease-in-out infinite",boxShadow:"0 0 8px rgba(57,255,138,0.6)"}}/>
-                    <span style={{fontFamily:"'Orbitron'",fontSize:15,fontWeight:700,color:T.green}}>Mining...</span>
-                    <span style={{fontSize:12,color:T.muted}}>session active</span>
+                <div style={{marginBottom:10}}>
+                  {/* Countdown timer — exact same style as Dulce's 23:59:58 */}
+                  <div style={{background:"rgba(57,255,138,0.06)",border:`1px solid ${T.greenDim}`,borderRadius:10,padding:"12px 14px",display:"flex",alignItems:"center",justifyContent:"center",gap:10,marginBottom:8}}>
+                    <div style={{width:8,height:8,borderRadius:"50%",background:T.green,animation:"pulse 1s ease-in-out infinite",boxShadow:"0 0 8px rgba(57,255,138,0.6)",flexShrink:0}}/>
+                    <span style={{fontFamily:"'Orbitron'",fontSize:20,fontWeight:700,color:T.green,letterSpacing:2}}>
+                      {(()=>{const rem=Math.max(0,Math.ceil((MINING_DURATION_MS-(Date.now()-miningStartedAt))/1000));return formatTime(rem);})()}
+                    </span>
                   </div>
-                  <div style={{fontSize:11,color:T.muted,textAlign:"center",marginBottom:10}}>{(()=>{const rem=Math.max(0,Math.ceil((MINING_DURATION_MS-(Date.now()-miningStartedAt))/1000));return`Come back in ${formatTime(rem)} to claim your hashes`;})()}</div>
+                  <div style={{fontSize:11,color:T.muted,textAlign:"center"}}>Production in progress — come back to collect</div>
                 </div>
               )}
               {claimReady && (
-                <button onClick={claimHashes} className="shimmer-btn btn-gold" style={{width:"100%",padding:"14px",border:"none",borderRadius:12,fontFamily:"'Rajdhani'",fontWeight:700,fontSize:15,cursor:"pointer",color:"#000",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+                <button onClick={claimHashes} className="shimmer-btn btn-gold" style={{width:"100%",padding:"14px",border:"none",borderRadius:12,fontFamily:"'Rajdhani'",fontWeight:700,fontSize:15,cursor:"pointer",color:"#000",display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginBottom:10}}>
                   🎁 Claim Hashes · Watch Ad
                 </button>
               )}
-              <div style={{height:8}}/>
+
+              {/* Swap button */}
               <button onClick={()=>setShowSwap(true)} className="btn-gold swap-card" style={{width:"100%",padding:"12px",background:`linear-gradient(135deg,rgba(245,200,66,0.1),rgba(245,200,66,0.05))`,border:`1px solid ${T.goldDim}`,borderRadius:10,color:T.gold,fontFamily:"'Rajdhani'",fontWeight:700,fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
                 <Icon name="swap" size={16}/> SWAP HASHES → TON
               </button>
