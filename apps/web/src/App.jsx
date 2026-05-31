@@ -505,6 +505,22 @@ export default function NovaMine(){
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
 
+  // ── Poll /me every 60s — backup so admin credits always reflect ───────────
+  useEffect(()=>{
+    const poll = setInterval(async ()=>{
+      try {
+        const fresh = await api.me();
+        if(fresh?.user){
+          setNova(Number(fresh.user.nova ?? 0));
+          setHashes(Number(fresh.user.hashes ?? 0));
+          setTonBalance(Number(fresh.user.ton_balance ?? 0));
+          setMiningPower(miningPowerFromNova(Number(fresh.user.nova ?? 0)));
+        }
+      } catch(_){}
+    }, 60_000);
+    return ()=> clearInterval(poll);
+  },[]);
+
   // ── Load ad config from API ───────────────────────────────────────────────
   // Also load shop tiers independently so they show even if auth is slow
   useEffect(()=>{
