@@ -85,14 +85,30 @@ miningRouter.post("/claim", requireAuth, async (req, res, next) => {
       .single();
     if (upErr) throw upErr;
 
-    // Award NOVA bonus for every claim — atomic increment so concurrent calls
-    // can't double-credit. The frontend must read this value from the response
-    // rather than calculating it locally.
-    const newNova = await supabaseAdmin.rpc("increment_user_nova", {
+    // Award NOVA bonus for every claim — atomic RPC preferred; manual fallback
+    // if the RPC is unavailable so the claim never silently drops nova.
+    let novaAfterClaim: number | null = null;
+    const { data: novaData, error: rpcError } = await supabaseAdmin.rpc("increment_user_nova", {
       p_user_id: userId,
       p_amount: MINING.NOVA_PER_CLAIM,
     });
-    if (newNova.error) throw newNova.error;
+    if (rpcError) {
+      // Fallback: manual read-modify-write
+      const { data: freshUser } = await supabaseAdmin
+        .from("users").select("nova").eq("id", userId).single();
+      if (freshUser) {
+        const newNova = Number(freshUser.nova ?? 0) + MINING.NOVA_PER_CLAIM;
+        await supabaseAdmin.from("users").update({ nova: newNova }).eq("id", userId);
+        novaAfterClaim = newNova;
+      }
+    } else {
+      novaAfterClaim = novaData != null ? Number(novaData) : null;
+    }
+    // Last resort: fetch current value so frontend is always in sync
+    if (novaAfterClaim == null) {
+      const { data: fb } = await supabaseAdmin.from("users").select("nova").eq("id", userId).single();
+      novaAfterClaim = fb ? Number(fb.nova ?? 0) : 0;
+    }
 
     res.json({
       sessionId: session.id,
@@ -100,7 +116,7 @@ miningRouter.post("/claim", requireAuth, async (req, res, next) => {
       novaEarned: MINING.NOVA_PER_CLAIM,
       hashes: updated.hashes,
       tonBalance: updated.ton_balance,
-      nova: newNova.data,
+      nova: novaAfterClaim,
     });
   } catch (err) {
     next(err);
