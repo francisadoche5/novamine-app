@@ -1033,7 +1033,7 @@ export default function NovaMine(){
               <div style={{background:"rgba(245,200,66,0.06)",border:`1px solid rgba(245,200,66,0.15)`,borderRadius:12,padding:"16px",textAlign:"center",marginBottom:14}}>
                 <div style={{fontFamily:"'Orbitron'",fontWeight:900,fontSize:26,color:T.green,textShadow:"0 0 20px rgba(57,255,138,0.5)",lineHeight:1}}>
                   {(()=>{
-                    if(miningActive && miningStartedAt){
+                    if((miningActive || claimReady) && miningStartedAt){
                       const elapsed  = Date.now() - miningStartedAt;
                       const progress = Math.min(elapsed / MINING_DURATION_MS, 1);
                       const live     = hashes + MINING.hashesPerSession(miningPower) * progress;
