@@ -9,49 +9,62 @@ meRouter.get("/", requireAuth, async (req, res, next) => {
   try {
     const userId = (req as any).auth!.sub;
 
-    const { data: user, error } = await supabaseAdmin
-      .from("users")
-      .select("id, telegram_id, username, first_name, last_name, photo_url, nova, hashes, ton_balance, daily_rate, mining_power, created_at")
-      .eq("id", userId)
-      .single();
-    if (error) throw error;
-
-    const { data: session } = await supabaseAdmin
-      .from("mining_sessions")
-      .select("id, started_at, claim_ready_at, claimed_at")
-      .eq("user_id", userId)
-      .is("claimed_at", null)
-      .order("started_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    const { data: lastSpin } = await supabaseAdmin
-      .from("slot_spins")
-      .select("next_available_at")
-      .eq("user_id", userId)
-      .order("spun_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
+    // Run all queries in parallel — previously sequential, causing 6 round-trips
+    // to Supabase before the response could be sent. Now they all fire at once.
     const startOfUtcDay = new Date();
     startOfUtcDay.setUTCHours(0, 0, 0, 0);
-    const { data: todayDice } = await supabaseAdmin
-      .from("dice_rolls")
-      .select("id, value, reward, rolled_at")
-      .eq("user_id", userId)
-      .gte("rolled_at", startOfUtcDay.toISOString())
-      .maybeSingle();
 
-    const { count: qualifiedFriends } = await supabaseAdmin
-      .from("referrals")
-      .select("id", { count: "exact", head: true })
-      .eq("referrer_id", userId)
-      .eq("status", "active");
+    const [
+      { data: user, error },
+      { data: session },
+      { data: lastSpin },
+      { data: todayDice },
+      { count: qualifiedFriends },
+      { count: totalReferred },
+    ] = await Promise.all([
+      supabaseAdmin
+        .from("users")
+        .select("id, telegram_id, username, first_name, last_name, photo_url, nova, hashes, ton_balance, daily_rate, mining_power, created_at")
+        .eq("id", userId)
+        .single(),
 
-    const { count: totalReferred } = await supabaseAdmin
-      .from("referrals")
-      .select("id", { count: "exact", head: true })
-      .eq("referrer_id", userId);
+      supabaseAdmin
+        .from("mining_sessions")
+        .select("id, started_at, claim_ready_at, claimed_at")
+        .eq("user_id", userId)
+        .is("claimed_at", null)
+        .order("started_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+
+      supabaseAdmin
+        .from("slot_spins")
+        .select("next_available_at")
+        .eq("user_id", userId)
+        .order("spun_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+
+      supabaseAdmin
+        .from("dice_rolls")
+        .select("id, value, reward, rolled_at")
+        .eq("user_id", userId)
+        .gte("rolled_at", startOfUtcDay.toISOString())
+        .maybeSingle(),
+
+      supabaseAdmin
+        .from("referrals")
+        .select("id", { count: "exact", head: true })
+        .eq("referrer_id", userId)
+        .eq("status", "active"),
+
+      supabaseAdmin
+        .from("referrals")
+        .select("id", { count: "exact", head: true })
+        .eq("referrer_id", userId),
+    ]);
+
+    if (error) throw error;
 
     res.json({
       user,
