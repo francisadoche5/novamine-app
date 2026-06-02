@@ -53,7 +53,7 @@ export const api = {
   rollDice: () => request("/games/dice/roll", { method: "POST" }),
 
   // Tasks
-  listTasks: () => request("/tasks"),
+  // listTasks removed — App.jsx now queries Supabase directly.
   claimTask: (taskId) => request(`/tasks/${taskId}/claim`, { method: "POST" }),
 
   // Swap & withdraw
