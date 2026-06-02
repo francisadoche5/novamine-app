@@ -241,11 +241,11 @@ adminRouter.put("/shop-tiers", requireAdmin, async (req: any, res: any) => {
 // ── Tasks (DB-backed) ─────────────────────────────────────────────────────── 
 adminRouter.get("/tasks", requireAdmin, async (_req: any, res: any) => {
   try {
-    // Only return active tasks — no .order("created_at") to avoid failures
-    const { data } = await supabaseAdmin
+    const { data, error } = await supabaseAdmin
       .from("tasks")
-      .select("id, label, reward, action, url")
-      .eq("active", true);
+      .select("*")
+      .order("created_at", { ascending: true });
+    if (error) throw error;
     res.json(data ?? []);
   } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
@@ -255,20 +255,34 @@ adminRouter.put("/tasks", requireAdmin, async (req: any, res: any) => {
     const { tasks } = req.body;
     if (!Array.isArray(tasks)) return res.status(400).json({ error: "tasks must be an array" });
 
-    // Delete ALL tasks then re-insert cleanly so removed tasks are truly gone
-    await supabaseAdmin.from("tasks").delete().neq("id", "");
+    // FIX: Delete all existing tasks first, then insert fresh rows.
+    // The previous approach (blanket active=false + upsert) could silently
+    // fail if Supabase couldn't resolve the upsert conflict key, leaving
+    // all tasks inactive in the DB and showing "No tasks" to users.
+    const { error: deleteError } = await supabaseAdmin
+      .from("tasks")
+      .delete()
+      .neq("id", "");                       // matches all rows
+
+    if (deleteError) throw deleteError;
 
     if (tasks.length > 0) {
       const rows = tasks.map((t: any) => ({
-        id: t.id,
-        label: t.label ?? t.title,
+        id: String(t.id),
+        label: t.label ?? t.title ?? "Task",
         reward: Number(t.reward ?? 0),
         action: t.action ?? "Claim",
         url: t.url ?? null,
-        active: true,
+        active: true,                       // always explicitly true on insert
       }));
-      await supabaseAdmin.from("tasks").insert(rows);
+
+      const { error: insertError } = await supabaseAdmin
+        .from("tasks")
+        .insert(rows);
+
+      if (insertError) throw insertError;
     }
+
     res.json({ ok: true });
   } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
