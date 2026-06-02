@@ -241,11 +241,11 @@ adminRouter.put("/shop-tiers", requireAdmin, async (req: any, res: any) => {
 // ── Tasks (DB-backed) ─────────────────────────────────────────────────────── 
 adminRouter.get("/tasks", requireAdmin, async (_req: any, res: any) => {
   try {
-    const { data, error } = await supabaseAdmin
+    // Only return active tasks — no .order("created_at") to avoid failures
+    const { data } = await supabaseAdmin
       .from("tasks")
-      .select("*")
-      .order("created_at", { ascending: true });
-    if (error) throw error;
+      .select("id, label, reward, action, url")
+      .eq("active", true);
     res.json(data ?? []);
   } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
@@ -255,8 +255,9 @@ adminRouter.put("/tasks", requireAdmin, async (req: any, res: any) => {
     const { tasks } = req.body;
     if (!Array.isArray(tasks)) return res.status(400).json({ error: "tasks must be an array" });
 
-    // Mark all existing tasks inactive then upsert
-    await supabaseAdmin.from("tasks").update({ active: false }).neq("id", "");
+    // Delete ALL tasks then re-insert cleanly so removed tasks are truly gone
+    await supabaseAdmin.from("tasks").delete().neq("id", "");
+
     if (tasks.length > 0) {
       const rows = tasks.map((t: any) => ({
         id: t.id,
@@ -266,7 +267,7 @@ adminRouter.put("/tasks", requireAdmin, async (req: any, res: any) => {
         url: t.url ?? null,
         active: true,
       }));
-      await supabaseAdmin.from("tasks").upsert(rows);
+      await supabaseAdmin.from("tasks").insert(rows);
     }
     res.json({ ok: true });
   } catch (e: any) { res.status(500).json({ error: e.message }); }
