@@ -467,7 +467,10 @@ export default function NovaMine(){
           const taskData = await api.listTasks();
           // API returns { tasks: [...] } — each item has done flag from server
           const taskList = taskData?.tasks ?? (Array.isArray(taskData) ? taskData : []);
-          if(taskList.length >= 0){
+          // FIX: was `>= 0` which is always true — an empty array would wipe
+          // the task list even when the DB fetch silently returned nothing.
+          // Only update state when the server actually returned tasks.
+          if(taskList.length > 0){
             setTasks(taskList.map(t=>({
               id: t.id,
               label: t.title ?? t.label ?? "Task",
