@@ -491,9 +491,14 @@ function TasksPanel({ notify }) {
     adminFetch("/tasks").then(data => {
       if (Array.isArray(data) && data.length > 0) {
         setTasks(data.map(t => ({
-          id: t.id, label: t.label ?? t.title,
+          id: t.id,
+          label: t.label ?? t.title,
           reward: Number(t.reward ?? t.nova_reward ?? 0),
-          action: t.action ?? "Claim", url: t.url ?? "",
+          action: t.action ?? "Claim",
+          url: t.url ?? "",
+          // FIX: preserve active so it roundtrips correctly on save.
+          // Previously dropped here — re-saved tasks could lose active=true.
+          active: t.active !== false,
         })));
       }
     }).catch(() => {});
