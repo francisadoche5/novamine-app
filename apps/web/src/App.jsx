@@ -462,21 +462,37 @@ export default function NovaMine(){
           if(shopData?.walletAddress) setShopWallet(shopData.walletAddress);
         } catch(_) {}
 
-        // Load tasks from API
+        // Load tasks — query Supabase directly (no API intermediary).
+        // This mirrors the GemStrike pattern: anon key + RLS policy allows
+        // public SELECT on active tasks, while claim writes still go through
+        // the API server for validation.
         try {
-          const taskData = await api.listTasks();
-          // API returns { tasks: [...] } — each item has done flag from server
-          const taskList = taskData?.tasks ?? (Array.isArray(taskData) ? taskData : []);
-          // FIX: was `>= 0` which is always true — an empty array would wipe
-          // the task list even when the DB fetch silently returned nothing.
-          // Only update state when the server actually returned tasks.
-          if(taskList.length > 0){
-            setTasks(taskList.map(t=>({
+          const { data: dbTasks, error: dbError } = await supabase
+            .from("tasks")
+            .select("id, label, reward, action, url, active")
+            .eq("active", true)
+            .order("created_at", { ascending: true });
+
+          if (dbError) throw dbError;
+
+          // Fetch which tasks this user already completed
+          let completedIds = new Set();
+          try {
+            const { data: completions } = await supabase
+              .from("tasks_completed")
+              .select("task_id")
+              .eq("user_id", tgUser.id);
+            (completions ?? []).forEach(r => completedIds.add(r.task_id));
+          } catch (_) { /* non-fatal — tasks show as unclaimed if this fails */ }
+
+          const taskList = dbTasks ?? [];
+          if (taskList.length > 0) {
+            setTasks(taskList.map(t => ({
               id: t.id,
-              label: t.title ?? t.label ?? "Task",
-              reward: Number(t.nova_reward ?? t.reward ?? 0),
-              done: !!t.done,
-              action: t.action_label ?? t.action ?? "Claim",
+              label: t.label ?? "Task",
+              reward: Number(t.reward ?? 0),
+              done: completedIds.has(t.id),
+              action: t.action ?? "Claim",
               url: t.url ?? null,
             })));
           }
