@@ -11,7 +11,6 @@ import { authRouter } from "./routes/auth.js";
 import { meRouter } from "./routes/me.js";
 import { miningRouter } from "./routes/mining.js";
 import { gamesRouter } from "./routes/games.js";
-import { tasksRouter } from "./routes/tasks.js";
 import { swapRouter } from "./routes/swap.js";
 import { withdrawRouter } from "./routes/withdraw.js";
 import { shopRouter } from "./routes/shop.js";
@@ -68,7 +67,6 @@ app.get("/ad-config-public", async (_req, res) => {
 app.use("/me", meRouter);
 app.use("/mining", miningRouter);
 app.use("/games", gamesRouter);
-app.use("/tasks", tasksRouter);
 app.use("/swap", swapRouter);
 app.use("/withdraw", withdrawRouter);
 app.use("/shop", shopRouter);
