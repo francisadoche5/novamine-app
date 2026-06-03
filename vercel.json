@@ -1,6 +1,6 @@
 {
   "buildCommand": "npm --workspace=@novamine/web run build",
-  "outputDirectory": "dist",
+  "outputDirectory": "apps/web/dist",
   "installCommand": "npm install",
   "framework": null,
   "rewrites": [
