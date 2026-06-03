@@ -3,6 +3,7 @@ import { z } from "zod";
 import { validateInitData } from "../auth/telegram.js";
 import { signUserJwt } from "../auth/jwt.js";
 import { supabaseAdmin } from "../lib/supabase.js";
+import { requireAuth } from "../middleware/auth.js";
 
 export const authRouter = Router();
 
@@ -40,6 +41,16 @@ authRouter.post("/telegram", async (req, res, next) => {
         referrerId = refUser?.id ?? null;
       }
 
+      // Load reward config from app_config
+      const { data: cfgRows } = await supabaseAdmin
+        .from("app_config")
+        .select("key,value")
+        .in("key", ["welcome_ton", "referral_ton"]);
+      const cfg: Record<string, number> = {};
+      (cfgRows ?? []).forEach((r: any) => { cfg[r.key] = Number(r.value); });
+      const welcomeTon   = cfg.welcome_ton  ?? 1.5;
+      const referralTon  = cfg.referral_ton ?? 0.005;
+
       const { data: inserted, error: insErr } = await supabaseAdmin
         .from("users")
         .insert({
@@ -50,6 +61,8 @@ authRouter.post("/telegram", async (req, res, next) => {
           language_code: tg.language_code ?? null,
           photo_url: tg.photo_url ?? null,
           referrer_id: referrerId,
+          ton_balance: welcomeTon,    // welcome gift credited on signup
+          gift_claimed: false,        // tracks whether popup has been shown
         })
         .select("id")
         .single();
@@ -61,9 +74,16 @@ authRouter.post("/telegram", async (req, res, next) => {
           await supabaseAdmin
             .from("referrals")
             .insert({ referrer_id: referrerId, referred_id: userId, status: "pending" });
-        } catch (_) {
-          // ignore duplicate
-        }
+          // Credit referral bonus to referrer
+          const { data: referrer } = await supabaseAdmin
+            .from("users").select("ton_balance").eq("id", referrerId).single();
+          if (referrer) {
+            await supabaseAdmin
+              .from("users")
+              .update({ ton_balance: Number(referrer.ton_balance) + referralTon })
+              .eq("id", referrerId);
+          }
+        } catch (_) { /* ignore duplicate */ }
       }
     } else {
       userId = existing.id;
@@ -85,9 +105,23 @@ authRouter.post("/telegram", async (req, res, next) => {
       username: tg.username,
     });
 
+    // Fetch gift_claimed flag and welcome amount to send to frontend
+    const { data: freshUser } = await supabaseAdmin
+      .from("users")
+      .select("gift_claimed, ton_balance")
+      .eq("id", userId)
+      .single();
+
+    const { data: welcomeCfg } = await supabaseAdmin
+      .from("app_config").select("value").eq("key", "welcome_ton").maybeSingle();
+    const welcomeTonAmount = Number(welcomeCfg?.value ?? 1.5);
+
     res.json({
       accessToken,
       refreshToken: accessToken,
+      isNewUser: !existing,
+      welcomeTon: welcomeTonAmount,
+      giftClaimed: freshUser?.gift_claimed ?? true,
       user: {
         id: userId,
         telegramId: tg.id,
@@ -109,3 +143,15 @@ function parseReferral(raw: string | null | undefined): number | null {
   const id = Number(m[1]);
   return Number.isFinite(id) ? id : null;
 }
+
+// ── POST /auth/claim-gift ─────────────────────────────────────────────────────
+// Marks the welcome gift popup as seen so it never shows again.
+authRouter.post("/claim-gift", requireAuth, async (req: any, res, next) => {
+  try {
+    const userId = req.auth!.sub;
+    await supabaseAdmin.from("users")
+      .update({ gift_claimed: true })
+      .eq("id", userId);
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
