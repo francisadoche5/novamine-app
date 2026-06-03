@@ -120,3 +120,20 @@ meRouter.patch("/mining-power", requireAuth, async (req, res, next) => {
     next(err);
   }
 });
+
+// ── GET /me/config ────────────────────────────────────────────────────────────
+// Returns user-facing config values (min withdraw, etc) — no admin secret needed.
+meRouter.get("/config", requireAuth, async (_req: any, res: any, next: any) => {
+  try {
+    const { data } = await supabaseAdmin.from("app_config")
+      .select("key,value")
+      .in("key", ["welcome_ton", "referral_ton", "min_withdraw_ton"]);
+    const cfg: Record<string, any> = {};
+    (data ?? []).forEach((r: any) => { cfg[r.key] = r.value; });
+    res.json({
+      minWithdrawTon: Number(cfg.min_withdraw_ton ?? 2.0),
+      welcomeTon:     Number(cfg.welcome_ton      ?? 1.5),
+      referralTon:    Number(cfg.referral_ton      ?? 0.005),
+    });
+  } catch (err) { next(err); }
+});
