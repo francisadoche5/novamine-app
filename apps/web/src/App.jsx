@@ -496,7 +496,10 @@ export default function NovaMine(){
               url: t.url ?? null,
             })));
           }
-        } catch(_) {} finally { setTasksLoading(false); }
+        } catch(taskErr) {
+          console.error("[NovaMine] Task load failed:", taskErr);
+          setTasksError(String(taskErr?.message ?? taskErr));
+        } finally { setTasksLoading(false); }
 
         // Load referral count from API
         try {
@@ -627,6 +630,7 @@ export default function NovaMine(){
 
   const [tasks,setTasks]=useState([]);
   const [tasksLoading,setTasksLoading]=useState(true);
+  const [tasksError,setTasksError]=useState(null);
 
   // ── Auto-update mining power when NOVA changes ───────────────────────────
   useEffect(()=>{
@@ -1357,6 +1361,8 @@ export default function NovaMine(){
             <div style={{display:"flex",flexDirection:"column",gap:10}}>
               {tasksLoading?(
                 <div style={{textAlign:"center",color:T.muted,padding:24,fontSize:13}}>Loading tasks…</div>
+              ):tasksError?(
+                <div style={{textAlign:"center",color:"#ff6b6b",padding:24,fontSize:12,wordBreak:"break-all"}}>Task error: {tasksError}</div>
               ):tasks.length===0?(
                 <div style={{textAlign:"center",color:T.muted,padding:24,fontSize:13}}>No tasks available right now.</div>
               ):tasks.map(task=>(
