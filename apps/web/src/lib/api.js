@@ -1,5 +1,5 @@
 // Typed-ish thin client for the Render API. All economy-affecting calls
-// (mining, claiming, slots, dice, swap, withdraw, task claim) go through here
+// (mining, claiming, slots, dice, swap, withdraw) go through here
 // so the server can authoritatively validate cooldowns / balances / referrals.
 
 const BASE = import.meta.env.VITE_API_BASE_URL ?? "";
@@ -52,10 +52,6 @@ export const api = {
   spinSlots: () => request("/games/slots/spin", { method: "POST" }),
   rollDice: () => request("/games/dice/roll", { method: "POST" }),
 
-  // Tasks
-  // listTasks removed — App.jsx now queries Supabase directly.
-  claimTask: (taskId) => request(`/tasks/${taskId}/claim`, { method: "POST" }),
-
   // Swap & withdraw
   swap: (hashes) => request("/swap", { method: "POST", body: { hashes } }),
   requestWithdraw: (amount, walletAddress) =>
@@ -68,6 +64,8 @@ export const api = {
 
   // Referrals / team
   referrals: () => request("/referrals"),
+  milestoneClaims: () => request("/referrals/milestones"),
+  claimMilestone: (count) => request(`/referrals/milestones/${count}/claim`, { method: "POST" }),
 
   // Update mining power (called automatically when NOVA changes)
   updateMiningPower: (power) =>
