@@ -195,10 +195,10 @@ function SwapModal({onClose,hashes,onSwapComplete}){
 }
 
 // ── WITHDRAW MODAL ─────────────────────────────────────────────────────────────
-// Step 1: Check if user has ≥ 0.8 TON
+// Step 1: Check if user has ≥ minWithdrawTon
 // Step 2: Check referral requirement
-function WithdrawModal({onClose,tonBalance,qualifiedFriends,onGoSwap,onInvite,onWithdrawComplete}){
-  const MIN=0.8;
+function WithdrawModal({onClose,tonBalance,qualifiedFriends,onGoSwap,onInvite,onWithdrawComplete,minWithdrawTon}){
+  const MIN=minWithdrawTon??2.0;
   const NEEDED=5;
   const hasMin=tonBalance>=MIN;
   const hasRefs=qualifiedFriends>=NEEDED;
@@ -228,7 +228,7 @@ function WithdrawModal({onClose,tonBalance,qualifiedFriends,onGoSwap,onInvite,on
           <div style={{textAlign:"center",marginBottom:20}}>
             <div style={{fontSize:48,marginBottom:12}}>🔒</div>
             <div style={{fontFamily:"'Orbitron'",fontWeight:700,fontSize:18,color:T.gold,marginBottom:8}}>NOT ENOUGH TON</div>
-            <div style={{fontSize:13,color:T.muted,lineHeight:1.6}}>You need a minimum of <span style={{color:T.gold,fontWeight:700}}>0.8 TON</span> to withdraw.<br/>Keep mining and swapping NOVA to grow your balance.</div>
+            <div style={{fontSize:13,color:T.muted,lineHeight:1.6}}>You need a minimum of <span style={{color:T.gold,fontWeight:700}}>{MIN} TON</span> to withdraw.<br/>Keep mining and swapping NOVA to grow your balance.</div>
           </div>
 
           {/* Balance bar */}
@@ -381,6 +381,7 @@ export default function NovaMine(){
   const adTimer=useRef(null);
   const [qualifiedFriends, setQualifiedFriends] = useState(0);
   const [claimedMilestones, setClaimedMilestones] = useState([]);
+  const [minWithdrawTon, setMinWithdrawTon] = useState(2.0);
   const [showGift, setShowGift] = useState(false);
   const [giftOpened, setGiftOpened] = useState(false);
   const [welcomeTon, setWelcomeTon] = useState(1.5);
@@ -484,6 +485,11 @@ export default function NovaMine(){
           // API returns { total, qualified, pending, requiredForWithdraw, list }
           const qualified = refData?.qualified ?? 0;
           setQualifiedFriends(qualified);
+          // Load min withdraw from admin config
+          try {
+            const rwCfg = await api.getRewardConfig?.();
+            if (rwCfg?.minWithdrawTon) setMinWithdrawTon(Number(rwCfg.minWithdrawTon));
+          } catch(_) {}
           // Load which milestones already claimed
           try {
             const msData = await api.milestoneClaims();
@@ -1148,22 +1154,7 @@ export default function NovaMine(){
               </div>
             </div>
 
-            {/* Withdraw CTA */}
-            <div onClick={()=>setShowWithdraw(true)} style={{background:"linear-gradient(135deg,#0f1e0f,#0a1a0a)",border:`1px solid ${T.goldDim}`,borderRadius:14,padding:"14px 18px",marginBottom:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-              <div>
-                <div style={{fontFamily:"'Orbitron'",fontSize:12,color:T.gold,fontWeight:700,marginBottom:2}}>WITHDRAW TON</div>
-                <div style={{fontSize:11,color:T.muted}}>Min 0.8 TON · Swap HASHES first · 5 active referrals</div>
-                <div style={{marginTop:6,display:"flex",gap:4,alignItems:"center"}}>
-                  {[...Array(5)].map((_,i)=>(
-                    <div key={i} style={{width:20,height:5,borderRadius:3,background:i<qualifiedFriends?T.gold:"#1e2a1e"}}/>
-                  ))}
-                  <span style={{fontSize:10,color:T.muted,marginLeft:4}}>{qualifiedFriends}/5 referrals</span>
-                </div>
-              </div>
-              <div style={{width:40,height:40,borderRadius:10,background:T.goldFaint,border:`1px solid ${T.goldDim}`,display:"flex",alignItems:"center",justifyContent:"center",color:T.gold}}>
-                <Icon name="withdraw" size={18}/>
-              </div>
-            </div>
+
 
           </div>
         )}
@@ -1477,7 +1468,7 @@ export default function NovaMine(){
         </div>
       )}
       {showSwap&&<SwapModal onClose={()=>setShowSwap(false)} hashes={hashes} onSwapComplete={(r)=>{if(r?.hashes!=null)setHashes(Number(r.hashes));if(r?.tonBalance!=null)setTonBalance(Number(r.tonBalance));}}/>}
-      {showWithdraw&&<WithdrawModal onClose={()=>setShowWithdraw(false)} tonBalance={tonBalance} qualifiedFriends={qualifiedFriends} onGoSwap={()=>setShowSwap(true)} onInvite={handleShareReferral} onWithdrawComplete={()=>{setTonBalance(0);setShowWithdraw(false);}}/>}
+      {showWithdraw&&<WithdrawModal onClose={()=>setShowWithdraw(false)} tonBalance={tonBalance} qualifiedFriends={qualifiedFriends} onGoSwap={()=>setShowSwap(true)} onInvite={handleShareReferral} onWithdrawComplete={()=>{setTonBalance(0);setShowWithdraw(false);}} minWithdrawTon={minWithdrawTon}/>}
     </div>
   );
 }
