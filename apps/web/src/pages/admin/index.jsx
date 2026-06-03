@@ -117,6 +117,96 @@ const Modal = ({ title, onClose, children }) => (
 );
 
 // ─── MAIN DASHBOARD ───────────────────────────────────────────────────────────
+// ─── REWARDS CONFIG ─────────────────────────────────────────────────────────
+function RewardsPanel({ notify }) {
+  const [vals, setVals] = useState({ welcomeTon: 1.5, referralTon: 0.005, minWithdrawTon: 2.0 });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    adminFetch("/reward-config").then(data => {
+      if (data) setVals({
+        welcomeTon:     Number(data.welcomeTon    ?? 1.5),
+        referralTon:    Number(data.referralTon   ?? 0.005),
+        minWithdrawTon: Number(data.minWithdrawTon ?? 2.0),
+      });
+    }).catch(() => {}).finally(() => setLoading(false));
+  }, []);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await adminFetch("/reward-config", { method: "PATCH", body: vals });
+      notify("Reward settings saved!", "success");
+    } catch (e) {
+      notify("Save failed: " + e.message, "error");
+    } finally { setSaving(false); }
+  };
+
+  if (loading) return <div style={{ padding: 24, color: S.muted }}>Loading…</div>;
+
+  return (
+    <div>
+      <h2 style={{ fontFamily: "'Orbitron'", color: S.gold, marginBottom: 4 }}>🎁 Reward Settings</h2>
+      <p style={{ color: S.muted, fontSize: 13, marginBottom: 20 }}>Changes go live instantly — no redeploy needed.</p>
+
+      <Card style={{ marginBottom: 16 }}>
+        <div style={{ fontWeight: 700, marginBottom: 16, color: S.text }}>New User Welcome Gift</div>
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 11, color: S.muted, marginBottom: 4 }}>Welcome TON (credited on signup)</div>
+          <Input
+            type="number" step="0.1"
+            value={vals.welcomeTon}
+            onChange={v => setVals(p => ({ ...p, welcomeTon: v }))}
+          />
+        </div>
+        <div style={{ fontSize: 12, color: S.muted }}>
+          Each new user gets this amount credited to their TON balance and sees a gift popup.
+        </div>
+      </Card>
+
+      <Card style={{ marginBottom: 16 }}>
+        <div style={{ fontWeight: 700, marginBottom: 16, color: S.text }}>Referral Bonus</div>
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 11, color: S.muted, marginBottom: 4 }}>Referral TON (credited to referrer per new user)</div>
+          <Input
+            type="number" step="0.001"
+            value={vals.referralTon}
+            onChange={v => setVals(p => ({ ...p, referralTon: v }))}
+          />
+        </div>
+        <div style={{ fontSize: 12, color: S.muted }}>
+          When someone joins via a referral link, the referrer gets this amount added to their balance.
+        </div>
+      </Card>
+
+      <Card style={{ marginBottom: 20 }}>
+        <div style={{ fontWeight: 700, marginBottom: 16, color: S.text }}>Withdrawal Threshold</div>
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 11, color: S.muted, marginBottom: 4 }}>Minimum TON to withdraw</div>
+          <Input
+            type="number" step="0.1"
+            value={vals.minWithdrawTon}
+            onChange={v => setVals(p => ({ ...p, minWithdrawTon: v }))}
+          />
+        </div>
+        <div style={{ fontSize: 12, color: S.muted }}>
+          Users must have at least this much TON balance before they can request a withdrawal.
+        </div>
+      </Card>
+
+      <button
+        onClick={save}
+        disabled={saving}
+        style={{ background: `linear-gradient(135deg,${S.gold},#c9a227)`, color: "#000", border: "none",
+          borderRadius: 10, padding: "12px 28px", fontFamily: "'Orbitron'", fontWeight: 700,
+          fontSize: 13, cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.7 : 1 }}>
+        {saving ? "Saving…" : "Save Settings"}
+      </button>
+    </div>
+  );
+}
+
 export default function NovaMineAdmin() {
   const [authed, setAuthed] = useState(!!sessionStorage.getItem("nm_admin_secret"));
   const [secret, setSecret] = useState("");
@@ -172,6 +262,7 @@ export default function NovaMineAdmin() {
     { id: "users",       label: "Users",          icon: "👥" },
     { id: "shop",        label: "Shop",           icon: "🏪" },
     { id: "ads",         label: "Ad Control",     icon: "📺" },
+    { id: "rewards",      label: "Rewards",         icon: "🎁" },
     { id: "withdrawals", label: "Withdrawals",    icon: "💸" },
     { id: "purchases",   label: "Purchases",      icon: "🛒" },
   ];
@@ -203,6 +294,7 @@ export default function NovaMineAdmin() {
         {tab === "users"       && <UsersPanel notify={notify} />}
         {tab === "shop"        && <ShopPanel notify={notify} />}
         {tab === "ads"         && <AdsPanel notify={notify} />}
+        {tab === "rewards"      && <RewardsPanel notify={notify} />}
         {tab === "withdrawals" && <WithdrawalsPanel notify={notify} />}
         {tab === "purchases"   && <PurchasesPanel notify={notify} />}
       </div>
