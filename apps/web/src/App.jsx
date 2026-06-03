@@ -378,6 +378,7 @@ export default function NovaMine(){
   const miningTimer=useRef(null);
   const adTimer=useRef(null);
   const [qualifiedFriends, setQualifiedFriends] = useState(0);
+  const [claimedMilestones, setClaimedMilestones] = useState([]);
   const [refStats, setRefStats] = useState({total:0, valid:0, pending:0, nova:0});
   const [buyingTierId, setBuyingTierId] = useState(null);
   const [buyError, setBuyError] = useState(null);
@@ -470,6 +471,11 @@ export default function NovaMine(){
           // API returns { total, qualified, pending, requiredForWithdraw, list }
           const qualified = refData?.qualified ?? 0;
           setQualifiedFriends(qualified);
+          // Load which milestones already claimed
+          try {
+            const msData = await api.milestoneClaims();
+            setClaimedMilestones(msData?.claimed ?? []);
+          } catch(_) {}
           const total   = refData?.total ?? 0;
           const pending = refData?.pending ?? 0;
           const valid   = total - pending;
@@ -1298,23 +1304,45 @@ export default function NovaMine(){
             )}
 
             <div style={{fontWeight:700,fontSize:11,letterSpacing:2,color:T.muted,fontFamily:"'Orbitron'",margin:"4px 0 10px"}}>INVITE MILESTONES</div>
-            {[[1,"1.2K"],[5,"2.4K"],[25,"6K"],[50,"12K"],[100,"24K"]].map(([n,reward])=>(
-              <div key={n} style={{background:T.card,border:"1px solid #1e2a1e",borderRadius:12,padding:"12px 16px",marginBottom:8,display:"flex",alignItems:"center",gap:12}}>
-                <div style={{width:34,height:34,borderRadius:8,background:T.goldFaint,border:"1px solid #1e2a1e",display:"flex",alignItems:"center",justifyContent:"center",color:T.muted}}>
+            {[[1,1200,"1.2K"],[5,2400,"2.4K"],[25,6000,"6K"],[50,12000,"12K"],[100,24000,"24K"]].map(([n,novaAmt,reward])=>{
+              const reached = qualifiedFriends >= n;
+              const claimed = claimedMilestones.includes(n);
+              const progress = Math.min(100, Math.round((qualifiedFriends / n) * 100));
+              return (
+              <div key={n} style={{background:T.card,border:`1px solid ${claimed?"#1e3a1e":reached?"#2a3a1e":"#1e2a1e"}`,borderRadius:12,padding:"12px 16px",marginBottom:8,display:"flex",alignItems:"center",gap:12,opacity:claimed?0.7:1}}>
+                <div style={{width:34,height:34,borderRadius:8,background:reached?T.goldFaint:"#1a1a1a",border:`1px solid ${reached?T.goldDim:"#1e2a1e"}`,display:"flex",alignItems:"center",justifyContent:"center",color:reached?T.gold:T.muted}}>
                   <Icon name="users" size={15}/>
                 </div>
                 <div style={{flex:1}}>
-                  <div style={{fontWeight:700,fontSize:13}}>Invite {n} Friend{n>1?"s":""}</div>
+                  <div style={{fontWeight:700,fontSize:13,color:claimed?T.muted:T.text}}>Invite {n} Friend{n>1?"s":""}</div>
                   <div style={{fontSize:11,color:T.gold}}>⚡ +{reward} NOVA</div>
                   <div style={{marginTop:4,height:3,background:"#1e2a1e",borderRadius:2}}>
-                    <div style={{width:"0%",height:"100%",background:`linear-gradient(90deg,${T.gold},${T.green})`,borderRadius:2}}/>
+                    <div style={{width:`${progress}%`,height:"100%",background:`linear-gradient(90deg,${T.gold},${T.green})`,borderRadius:2,transition:"width 0.5s"}}/>
                   </div>
+                  <div style={{fontSize:10,color:T.muted,marginTop:2}}>{Math.min(qualifiedFriends,n)}/{n} friends</div>
                 </div>
-                <div style={{background:"#1a1a1a",border:"1px solid #1e2a1e",borderRadius:8,padding:"5px 10px",fontSize:11,color:T.muted,fontFamily:"'Orbitron'",display:"flex",alignItems:"center",gap:3}}>
-                  <Icon name="lock" size={11}/> {n}
-                </div>
+                {claimed?(
+                  <div style={{background:"rgba(57,255,138,0.1)",border:`1px solid ${T.green}`,borderRadius:8,padding:"5px 10px",fontSize:11,color:T.green,fontFamily:"'Orbitron'"}}>✓ Done</div>
+                ):reached?(
+                  <button onClick={async()=>{
+                    try{
+                      const r = await api.claimMilestone(n);
+                      if(r?.ok){
+                        setClaimedMilestones(p=>[...p,n]);
+                        setNova(r.new_nova);
+                      }
+                    }catch(e){ alert(e?.message??"Claim failed"); }
+                  }} className="btn-gold" style={{padding:"6px 12px",background:`linear-gradient(135deg,${T.gold},${T.goldDim})`,color:"#000",border:"none",borderRadius:8,fontFamily:"'Rajdhani'",fontWeight:700,fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}}>
+                    Claim
+                  </button>
+                ):(
+                  <div style={{background:"#1a1a1a",border:"1px solid #1e2a1e",borderRadius:8,padding:"5px 10px",fontSize:11,color:T.muted,fontFamily:"'Orbitron'",display:"flex",alignItems:"center",gap:3}}>
+                    <Icon name="lock" size={11}/> {n}
+                  </div>
+                )}
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
