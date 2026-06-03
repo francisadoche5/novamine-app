@@ -171,7 +171,6 @@ export default function NovaMineAdmin() {
     { id: "analytics",   label: "Analytics",     icon: "📊" },
     { id: "users",       label: "Users",          icon: "👥" },
     { id: "shop",        label: "Shop",           icon: "🏪" },
-    { id: "tasks",       label: "Tasks",          icon: "📋" },
     { id: "ads",         label: "Ad Control",     icon: "📺" },
     { id: "withdrawals", label: "Withdrawals",    icon: "💸" },
     { id: "purchases",   label: "Purchases",      icon: "🛒" },
@@ -203,7 +202,6 @@ export default function NovaMineAdmin() {
         {tab === "analytics"   && <AnalyticsPanel notify={notify} />}
         {tab === "users"       && <UsersPanel notify={notify} />}
         {tab === "shop"        && <ShopPanel notify={notify} />}
-        {tab === "tasks"       && <TasksPanel notify={notify} />}
         {tab === "ads"         && <AdsPanel notify={notify} />}
         {tab === "withdrawals" && <WithdrawalsPanel notify={notify} />}
         {tab === "purchases"   && <PurchasesPanel notify={notify} />}
@@ -470,106 +468,9 @@ function ShopPanel({ notify }) {
   );
 }
 
-// ─── TASKS (DB-backed editor — saves live to the database) ───────────────────
-const DEFAULT_TASKS = [
-  { id: "join_channel",        label: "Join NovaMine Channel",   reward: 500,  action: "Join",     url: "https://t.me/NovaMineChannel" },
-  { id: "join_chat",           label: "Join Community Chat",     reward: 500,  action: "Claim",    url: "https://t.me/NovaMineChat"    },
-  { id: "start_partner_alpha", label: "Start Partner Bot Alpha", reward: 1000, action: "Start Bot",url: "https://t.me/PartnerAlphaBot"  },
-  { id: "start_partner_beta",  label: "Start Partner Bot Beta",  reward: 500,  action: "Start Bot",url: "https://t.me/PartnerBetaBot"   },
+,
 ];
 
-function TasksPanel({ notify }) {
-  const [tasks, setTasks] = useState(DEFAULT_TASKS);
-  const [editing, setEditing] = useState(null);
-  const [editVals, setEditVals] = useState({});
-  const [showNew, setShowNew] = useState(false);
-  const [newTask, setNewTask] = useState({});
-  const [saving, setSaving] = useState(false);
-
-  // Load tasks from DB on mount
-  useEffect(() => {
-    adminFetch("/tasks").then(data => {
-      if (Array.isArray(data) && data.length > 0) {
-        setTasks(data.map(t => ({
-          id: t.id,
-          label: t.label ?? t.title,
-          reward: Number(t.reward ?? t.nova_reward ?? 0),
-          action: t.action ?? "Claim",
-          url: t.url ?? "",
-          // FIX: preserve active so it roundtrips correctly on save.
-          // Previously dropped here — re-saved tasks could lose active=true.
-          active: t.active !== false,
-        })));
-      }
-    }).catch(() => {});
-  }, []);
-
-  const saveToDb = async (updated) => {
-    setSaving(true);
-    try {
-      await adminFetch("/tasks", { method: "PUT", body: { tasks: updated } });
-      setTasks(updated);
-      notify("✅ Tasks saved — live in the app immediately!");
-    } catch (e) { notify(e.message, "error"); }
-    finally { setSaving(false); }
-  };
-
-  const applyEdit = () => { saveToDb(tasks.map(t => t.id === editing ? { ...t, ...editVals, reward: Number(editVals.reward) } : t)); setEditing(null); };
-  const addTask = () => { saveToDb([...tasks, { id: `task_${Date.now()}`, ...newTask, reward: Number(newTask.reward) }]); setShowNew(false); setNewTask({}); };
-
-  return (
-    <div className="fade-in">
-      <SectionHeader icon="📋" title="Tasks Manager" sub="Changes save directly to the database — live in the app instantly" />
-      <div style={{ display: "grid", gap: 10, marginBottom: 20 }}>
-        {tasks.map(t => (
-          <Card key={t.id} style={{ padding: "14px 18px" }}>
-            {editing === t.id ? (
-              <div style={{ display: "grid", gap: 10 }}>
-                <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 10 }}>
-                  <div><div style={{ fontSize: 10, color: S.muted, marginBottom: 4 }}>LABEL</div><Input value={editVals.label||""} onChange={v => setEditVals(p => ({ ...p, label: v }))} /></div>
-                  <div><div style={{ fontSize: 10, color: S.muted, marginBottom: 4 }}>REWARD (NOVA)</div><Input value={editVals.reward||""} onChange={v => setEditVals(p => ({ ...p, reward: v }))} type="number" /></div>
-                  <div><div style={{ fontSize: 10, color: S.muted, marginBottom: 4 }}>MAX (0=unlimited)</div><Input value={editVals.maxCompletions??""} onChange={v => setEditVals(p => ({ ...p, maxCompletions: v }))} type="number" /></div>
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 10 }}>
-                  <div><div style={{ fontSize: 10, color: S.muted, marginBottom: 4 }}>URL</div><Input value={editVals.url||""} onChange={v => setEditVals(p => ({ ...p, url: v }))} /></div>
-                  <div><div style={{ fontSize: 10, color: S.muted, marginBottom: 4 }}>BUTTON LABEL</div><Input value={editVals.action||""} onChange={v => setEditVals(p => ({ ...p, action: v }))} /></div>
-                </div>
-                <div style={{ display: "flex", gap: 8 }}><Btn small onClick={applyEdit}>Save</Btn><Btn small onClick={() => setEditing(null)} color={S.muted}>Cancel</Btn></div>
-              </div>
-            ) : (
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 700, fontSize: 14, display: "flex", gap: 8, alignItems: "center" }}>{t.label}{t.maxCompletions > 0 && <Badge color={S.orange}>Cap: {t.maxCompletions}</Badge>}</div>
-                  <div style={{ fontSize: 11, color: S.mutedLight, fontFamily: "'JetBrains Mono'" }}>+{t.reward} NOVA · [{t.action}]</div>
-                </div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <Btn small onClick={() => { setEditing(t.id); setEditVals({ ...t }); }}>Edit</Btn>
-                  <Btn small danger onClick={() => saveToDb(tasks.filter(x => x.id !== t.id))}>Remove</Btn>
-                </div>
-              </div>
-            )}
-          </Card>
-        ))}
-      </div>
-      {showNew ? (
-        <Card style={{ border: `1px dashed ${S.green}55` }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 10 }}>
-            <div><div style={{ fontSize: 10, color: S.muted, marginBottom: 4 }}>LABEL</div><Input value={newTask.label||""} onChange={v => setNewTask(p => ({ ...p, label: v }))} /></div>
-            <div><div style={{ fontSize: 10, color: S.muted, marginBottom: 4 }}>REWARD</div><Input value={newTask.reward||""} onChange={v => setNewTask(p => ({ ...p, reward: v }))} type="number" /></div>
-            <div><div style={{ fontSize: 10, color: S.muted, marginBottom: 4 }}>MAX (0=unlimited)</div><Input value={newTask.maxCompletions||""} onChange={v => setNewTask(p => ({ ...p, maxCompletions: v }))} type="number" /></div>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 10, marginBottom: 12 }}>
-            <div><div style={{ fontSize: 10, color: S.muted, marginBottom: 4 }}>URL</div><Input value={newTask.url||""} onChange={v => setNewTask(p => ({ ...p, url: v }))} placeholder="https://t.me/…" /></div>
-            <div><div style={{ fontSize: 10, color: S.muted, marginBottom: 4 }}>BUTTON</div><Input value={newTask.action||""} onChange={v => setNewTask(p => ({ ...p, action: v }))} placeholder="Join / Claim" /></div>
-          </div>
-          <div style={{ display: "flex", gap: 8 }}><Btn small onClick={addTask} color={S.green}>Add Task</Btn><Btn small onClick={() => setShowNew(false)} color={S.muted}>Cancel</Btn></div>
-        </Card>
-      ) : <Btn onClick={() => setShowNew(true)} color={S.green}>➕ Add New Task</Btn>}
-    </div>
-  );
-}
-
-// ─── ADS ──────────────────────────────────────────────────────────────────────
 function AdsPanel({ notify }) {
   const [config, setConfig] = useState(null);
   const [loading, setLoading] = useState(true);
