@@ -468,9 +468,6 @@ function ShopPanel({ notify }) {
   );
 }
 
-,
-];
-
 function AdsPanel({ notify }) {
   const [config, setConfig] = useState(null);
   const [loading, setLoading] = useState(true);
