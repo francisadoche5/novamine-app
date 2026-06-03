@@ -145,7 +145,7 @@ export const TASKS = {
 
 // ── WITHDRAW GATING ──────────────────────────────────────────────────────────
 export const WITHDRAW = {
-  MIN_TON: 0.8,
+  MIN_TON: 2.0,
   REQUIRED_ACTIVE_REFERRALS: 5,
   ACTIVE_MIN_DAYS_MINED_THIS_MONTH: 10,
 };
