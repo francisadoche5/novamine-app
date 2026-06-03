@@ -64,6 +64,7 @@ export const api = {
 
   // Referrals / team
   referrals: () => request("/referrals"),
+  claimGift: () => request("/auth/claim-gift", { method: "POST" }),
   milestoneClaims: () => request("/referrals/milestones"),
   claimMilestone: (count) => request(`/referrals/milestones/${count}/claim`, { method: "POST" }),
 
