@@ -204,6 +204,37 @@ adminRouter.patch("/ad-config", requireAdmin, async (req: any, res: any) => {
   } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
 
+// ── Reward Config ────────────────────────────────────────────────────────────
+adminRouter.get("/reward-config", requireAdmin, async (_req: any, res: any) => {
+  try {
+    const { data } = await supabaseAdmin.from("app_config")
+      .select("key,value")
+      .in("key", ["welcome_ton", "referral_ton", "min_withdraw_ton"]);
+    const cfg: Record<string, any> = {};
+    (data ?? []).forEach((r: any) => { cfg[r.key] = r.value; });
+    res.json({
+      welcomeTon:    Number(cfg.welcome_ton    ?? 1.5),
+      referralTon:   Number(cfg.referral_ton   ?? 0.005),
+      minWithdrawTon: Number(cfg.min_withdraw_ton ?? 2.0),
+    });
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+adminRouter.patch("/reward-config", requireAdmin, async (req: any, res: any) => {
+  try {
+    const { welcomeTon, referralTon, minWithdrawTon } = req.body;
+    const updates = [
+      { key: "welcome_ton",     value: Number(welcomeTon) },
+      { key: "referral_ton",    value: Number(referralTon) },
+      { key: "min_withdraw_ton",value: Number(minWithdrawTon) },
+    ];
+    for (const u of updates) {
+      await supabaseAdmin.from("app_config").upsert(u);
+    }
+    res.json({ ok: true });
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
 // ── Shop Tiers (DB-backed) ────────────────────────────────────────────────── 
 adminRouter.get("/shop-tiers", requireAdmin, async (_req: any, res: any) => {
   try {
