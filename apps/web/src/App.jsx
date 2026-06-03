@@ -462,44 +462,7 @@ export default function NovaMine(){
           if(shopData?.walletAddress) setShopWallet(shopData.walletAddress);
         } catch(_) {}
 
-        // Load tasks — query Supabase directly (no API intermediary).
-        // This mirrors the GemStrike pattern: anon key + RLS policy allows
-        // public SELECT on active tasks, while claim writes still go through
-        // the API server for validation.
-        try {
-          const { data: dbTasks, error: dbError } = await supabase
-            .from("tasks")
-            .select("id, label, reward, action, url, active")
-            .eq("active", true)
-            .order("created_at", { ascending: true });
 
-          if (dbError) throw dbError;
-
-          // Fetch which tasks this user already completed
-          let completedIds = new Set();
-          try {
-            const { data: completions } = await supabase
-              .from("tasks_completed")
-              .select("task_id")
-              .eq("user_id", tgUser.id);
-            (completions ?? []).forEach(r => completedIds.add(r.task_id));
-          } catch (_) { /* non-fatal — tasks show as unclaimed if this fails */ }
-
-          const taskList = dbTasks ?? [];
-          if (taskList.length > 0) {
-            setTasks(taskList.map(t => ({
-              id: t.id,
-              label: t.label ?? "Task",
-              reward: Number(t.reward ?? 0),
-              done: completedIds.has(t.id),
-              action: t.action ?? "Claim",
-              url: t.url ?? null,
-            })));
-          }
-        } catch(taskErr) {
-          console.error("[NovaMine] Task load failed:", taskErr);
-          setTasksError(String(taskErr?.message ?? taskErr));
-        } finally { setTasksLoading(false); }
 
         // Load referral count from API
         try {
@@ -516,7 +479,6 @@ export default function NovaMine(){
 
       } catch(e){
         console.warn("Failed to load user data:", e);
-        setTasksLoading(false); // ensure tasks stop showing spinner on auth failure
       } finally {
         setUserLoaded(true);
       }
@@ -628,9 +590,7 @@ export default function NovaMine(){
     return v === today;
   });
 
-  const [tasks,setTasks]=useState([]);
-  const [tasksLoading,setTasksLoading]=useState(true);
-  const [tasksError,setTasksError]=useState(null);
+
 
   // ── Auto-update mining power when NOVA changes ───────────────────────────
   useEffect(()=>{
@@ -832,21 +792,7 @@ export default function NovaMine(){
     });
   }
 
-  async function claimTask(id){
-    // Optimistically mark as done so UI feels instant
-    const task = tasks.find(t=>t.id===id);
-    setTasks(ts=>ts.map(t=>t.id===id?{...t,done:true}:t));
-    try{
-      const result = await api.claimTask(id);
-      // Use server nova value if returned
-      if(result?.nova!=null) setNova(Number(result.nova));
-      else if(task?.reward) setNova(p=>p+task.reward);
-    }catch(e){
-      // Roll back the optimistic update on failure
-      setTasks(ts=>ts.map(t=>t.id===id?{...t,done:false}:t));
-      console.warn("Claim task failed:", e);
-    }
-  }
+
 
   // ── Shop: buy a tier via TonConnect wallet ───────────────────────────────
   async function handleBuyTier(tier){
@@ -1284,13 +1230,7 @@ export default function NovaMine(){
         {tab==="tasks"&&(
           <div style={{padding:"20px 16px",animation:"slideUp 0.3s ease"}}>
             <div style={{fontFamily:"'Orbitron'",fontWeight:700,fontSize:18,color:T.gold,marginBottom:4,letterSpacing:2}}>MISSIONS</div>
-            <div style={{fontSize:14,color:T.muted,marginBottom:4}}>Complete tasks to earn NOVA</div>
-            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:20}}>
-              <div style={{flex:1,height:4,background:"#1e2a1e",borderRadius:2}}>
-                <div style={{width:`${(tasks.filter(t=>t.done).length/tasks.length)*100}%`,height:"100%",background:`linear-gradient(90deg,${T.gold},${T.green})`,borderRadius:2,transition:"width 0.5s"}}/>
-              </div>
-              <span style={{fontSize:12,color:T.muted,fontFamily:"'Orbitron'"}}>{tasks.filter(t=>t.done).length}/{tasks.length}</span>
-            </div>
+            <div style={{fontSize:14,color:T.muted,marginBottom:20}}>Play games & invite friends to earn NOVA</div>
 
             <div style={{fontWeight:700,fontSize:11,letterSpacing:2,color:T.muted,fontFamily:"'Orbitron'",marginBottom:10}}>FREE NOVA GAMES</div>
             <div style={{display:"flex",gap:8,marginBottom:16}}>
@@ -1357,34 +1297,7 @@ export default function NovaMine(){
               </div>
             )}
 
-            <div style={{fontWeight:700,fontSize:11,letterSpacing:2,color:T.muted,fontFamily:"'Orbitron'",marginBottom:10}}>TASK LIST</div>
-            <div style={{display:"flex",flexDirection:"column",gap:10}}>
-              {tasksLoading?(
-                <div style={{textAlign:"center",color:T.muted,padding:24,fontSize:13}}>Loading tasks…</div>
-              ):tasksError?(
-                <div style={{textAlign:"center",color:"#ff6b6b",padding:24,fontSize:12,wordBreak:"break-all"}}>Task error: {tasksError}</div>
-              ):tasks.length===0?(
-                <div style={{textAlign:"center",color:T.muted,padding:24,fontSize:13}}>No tasks available right now.</div>
-              ):tasks.map(task=>(
-                <div key={task.id} style={{background:T.card,border:`1px solid ${task.done?"#1e3a1e":"#1e2a1e"}`,borderRadius:14,padding:"13px 16px",display:"flex",alignItems:"center",gap:12,opacity:task.done?0.7:1}}>
-                  <div style={{width:38,height:38,borderRadius:10,background:task.done?T.greenDim:T.goldFaint,border:`1px solid ${task.done?T.greenDim:T.goldDim}`,display:"flex",alignItems:"center",justifyContent:"center",color:task.done?T.green:T.gold,flexShrink:0}}>
-                    {task.done?<Icon name="check" size={17}/>:<Icon name="tasks" size={17}/>}
-                  </div>
-                  <div style={{flex:1}}>
-                    <div style={{fontWeight:700,fontSize:13,color:task.done?T.muted:T.text}}>{task.label}</div>
-                    <div style={{fontSize:11,color:T.gold}}>⚡ +{task.reward.toLocaleString()} NOVA</div>
-                  </div>
-                  {!task.done&&(
-                    <button onClick={()=>{
-                      if(task.url) window.Telegram?.WebApp?.openLink?window.Telegram.WebApp.openLink(task.url):window.open(task.url,"_blank");
-                      claimTask(task.id);
-                    }} className="btn-gold" style={{padding:"7px 13px",background:`linear-gradient(135deg,${T.gold},${T.goldDim})`,color:"#000",border:"none",borderRadius:8,fontFamily:"'Rajdhani'",fontWeight:700,fontSize:12,cursor:"pointer"}}>{task.action}</button>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            <div style={{fontWeight:700,fontSize:11,letterSpacing:2,color:T.muted,fontFamily:"'Orbitron'",margin:"20px 0 10px"}}>INVITE MILESTONES</div>
+            <div style={{fontWeight:700,fontSize:11,letterSpacing:2,color:T.muted,fontFamily:"'Orbitron'",margin:"4px 0 10px"}}>INVITE MILESTONES</div>
             {[[1,"1.2K"],[5,"2.4K"],[25,"6K"],[50,"12K"],[100,"24K"]].map(([n,reward])=>(
               <div key={n} style={{background:T.card,border:"1px solid #1e2a1e",borderRadius:12,padding:"12px 16px",marginBottom:8,display:"flex",alignItems:"center",gap:12}}>
                 <div style={{width:34,height:34,borderRadius:8,background:T.goldFaint,border:"1px solid #1e2a1e",display:"flex",alignItems:"center",justifyContent:"center",color:T.muted}}>
