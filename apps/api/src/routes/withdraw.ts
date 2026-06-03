@@ -16,8 +16,13 @@ withdrawRouter.post("/", requireAuth, async (req, res, next) => {
     const { amount, walletAddress } = Body.parse(req.body);
     const userId = (req as any).auth!.sub;
 
-    if (amount < WITHDRAW.MIN_TON) {
-      return res.status(400).json({ error: `Minimum withdrawal is ${WITHDRAW.MIN_TON} TON` });
+    // Read min withdrawal from app_config (admin-controlled), fall back to shared constant
+    const { data: minCfg } = await supabaseAdmin
+      .from("app_config").select("value").eq("key", "min_withdraw_ton").maybeSingle();
+    const minWithdraw = Number(minCfg?.value ?? WITHDRAW.MIN_TON);
+
+    if (amount < minWithdraw) {
+      return res.status(400).json({ error: `Minimum withdrawal is ${minWithdraw} TON` });
     }
 
     const { data: user, error } = await supabaseAdmin
