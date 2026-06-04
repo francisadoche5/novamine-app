@@ -383,6 +383,7 @@ export default function NovaMine(){
   const [claimedMilestones, setClaimedMilestones] = useState([]);
   const [minWithdrawTon, setMinWithdrawTon] = useState(2.0);
   const [showGift, setShowGift] = useState(false);
+  const [giftUnclaimed, setGiftUnclaimed] = useState(false); // shows banner on homepage
   const [showStreak, setShowStreak] = useState(false);
   const [streakDays, setStreakDays] = useState([]);   // array of {day, nova, ton, claimed}
   const [streakLoading, setStreakLoading] = useState(false);
@@ -403,13 +404,6 @@ export default function NovaMine(){
       try {
         initTelegram();
         const authResult = await authenticate();
-        // Show gift popup for new users who haven't claimed yet
-        if (authResult?.isNewUser !== false || authResult?.giftClaimed === false) {
-          if (!authResult?.giftClaimed) {
-            setWelcomeTon(authResult?.welcomeTon ?? 1.5);
-            setShowGift(true);
-          }
-        }
         const data = await api.me();
         if(data?.user){
           const realNova = Number(data.user.nova ?? 0);
@@ -422,6 +416,10 @@ export default function NovaMine(){
           setTonBalance(realTon);
           setMiningPower(realPower);
           userDbId.current = data.user.id;
+          // Show gift banner on homepage if user hasn't claimed yet
+          if (data.user.gift_claimed === false) {
+            setGiftUnclaimed(true); // shows the tappable gift banner
+          }
           // If DB power is stale/wrong, fix it silently in the background
           if(realPower !== Number(data.user.mining_power)){
             api.updateMiningPower(realPower).catch(()=>{});
@@ -1008,6 +1006,7 @@ export default function NovaMine(){
                 <div style={{fontSize:12,color:T.muted,marginBottom:20}}>credited to your balance</div>
                 <button onClick={()=>{
                   setShowGift(false);
+                  setGiftUnclaimed(false);
                   setTonBalance(p=>p+welcomeTon);
                 }} style={{background:`linear-gradient(135deg,${T.gold},${T.goldDim})`,color:"#000",border:"none",borderRadius:12,padding:"12px 32px",fontFamily:"'Orbitron'",fontWeight:700,fontSize:13,cursor:"pointer",letterSpacing:1}}>
                   CLAIM
@@ -1042,6 +1041,31 @@ export default function NovaMine(){
         {/* ══ NOVA/POWER TAB ══ */}
         {tab==="power"&&(
           <div style={{padding:"16px 16px 0",animation:"slideUp 0.3s ease"}}>
+
+            {/* ── Welcome Gift Box — only shown until claimed ── */}
+            {giftUnclaimed&&(
+              <div
+                onClick={()=>{
+                  setGiftOpened(false);
+                  setShowGift(true);
+                }}
+                style={{
+                  display:"flex",alignItems:"center",gap:12,
+                  background:"linear-gradient(135deg,rgba(245,200,66,0.15),rgba(245,200,66,0.05))",
+                  border:"1.5px solid rgba(245,200,66,0.6)",
+                  borderRadius:16,padding:"14px 18px",marginBottom:16,cursor:"pointer",
+                  boxShadow:"0 0 20px rgba(245,200,66,0.2)",
+                  animation:"glow 2s ease-in-out infinite",
+                }}
+              >
+                <div style={{fontSize:40,animation:"float 2s ease-in-out infinite"}}>🎁</div>
+                <div>
+                  <div style={{fontFamily:"'Orbitron'",fontSize:13,color:"#f5c842",fontWeight:700,letterSpacing:1}}>WELCOME GIFT</div>
+                  <div style={{fontSize:12,color:"#8a9a8a",marginTop:3}}>Tap to claim your {welcomeTon} TON reward!</div>
+                </div>
+                <div style={{marginLeft:"auto",fontSize:20}}>›</div>
+              </div>
+            )}
 
             {/* Nova card — CIRCLE design */}
             <div style={{display:"flex",justifyContent:"center",marginBottom:18}}>
