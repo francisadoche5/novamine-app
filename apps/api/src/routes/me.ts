@@ -1,9 +1,11 @@
 import { Router } from "express";
+import { streakRouter } from "./streak.js";
 import { requireAuth } from "../middleware/auth.js";
 import { supabaseAdmin } from "../lib/supabase.js";
 import { miningPowerFromNova } from "@novamine/shared";
 
 export const meRouter = Router();
+meRouter.use("/streak", streakRouter);
 
 meRouter.get("/", requireAuth, async (req, res, next) => {
   try {
