@@ -26,7 +26,7 @@ meRouter.get("/", requireAuth, async (req, res, next) => {
     ] = await Promise.all([
       supabaseAdmin
         .from("users")
-        .select("id, telegram_id, username, first_name, last_name, photo_url, nova, hashes, ton_balance, daily_rate, mining_power, created_at")
+        .select("id, telegram_id, username, first_name, last_name, photo_url, nova, hashes, ton_balance, daily_rate, mining_power, gift_claimed, created_at")
         .eq("id", userId)
         .single(),
 
