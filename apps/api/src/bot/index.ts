@@ -72,28 +72,28 @@ export async function startBot(app: Express) {
 
   // ── Notification Schedulers ─────────────────────────────────────────────────
 
-  // Runs every 5 minutes — checks for unclaimed mining sessions > 1 hour old
+  // Runs every 5 minutes — checks for unclaimed mining sessions > 8 hours old
   // and users who haven't logged in for > 24 hours
   async function runNotifications() {
     if (!config.isProd) return; // only in production
     try {
       const now = new Date();
 
-      // ── 1. Unclaimed mining reminder (session > 1 hour old) ──
-      const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000).toISOString();
+      // ── 1. Unclaimed mining reminder (session > 8 hours old) ──
+      const eightHoursAgo = new Date(now.getTime() - 8 * 60 * 60 * 1000).toISOString();
       const { data: miningSessions } = await supabaseAdmin
         .from("mining_sessions")
         .select("user_id, claim_ready_at, users!inner(telegram_id, first_name, notified_mining_at)")
-        .lt("claim_ready_at", oneHourAgo)
+        .lt("claim_ready_at", eightHoursAgo)
         .is("claimed_at", null);
 
       for (const session of (miningSessions ?? [])) {
         const u = (session as any).users;
         if (!u?.telegram_id) continue;
 
-        // Don't spam — only notify once per hour per user
+        // Don't spam — only notify once per 8 hours per user
         const lastNotified = u.notified_mining_at ? new Date(u.notified_mining_at) : null;
-        if (lastNotified && now.getTime() - lastNotified.getTime() < 60 * 60 * 1000) continue;
+        if (lastNotified && now.getTime() - lastNotified.getTime() < 8 * 60 * 60 * 1000) continue;
 
         try {
           await bot.api.sendMessage(
