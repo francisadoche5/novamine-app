@@ -410,15 +410,6 @@ export default function NovaMine(){
             setShowGift(true);
           }
         }
-        // Load daily streak — show popup if today not yet claimed
-        try {
-          const sd = await api.getStreak();
-          if (sd?.days) {
-            setStreakDays(sd.days);
-            const today = sd.days.find(d => d.isToday);
-            if (today && !today.claimed) setShowStreak(true);
-          }
-        } catch(_) {}
         const data = await api.me();
         if(data?.user){
           const realNova = Number(data.user.nova ?? 0);
@@ -518,6 +509,18 @@ export default function NovaMine(){
         console.warn("Failed to load user data:", e);
       } finally {
         setUserLoaded(true);
+
+        // Load streak in background — never blocks app load
+        setTimeout(async () => {
+          try {
+            const sd = await api.getStreak();
+            if (sd?.days && sd.days.length > 0) {
+              setStreakDays(sd.days);
+              const today = sd.days.find((d: any) => d.isToday);
+              if (today && !today.claimed) setShowStreak(true);
+            }
+          } catch(_) {}
+        }, 1500); // 1.5s delay so app fully renders first
       }
     })();
     return () => {
@@ -916,7 +919,7 @@ export default function NovaMine(){
       <style>{css}</style>
 
       {/* ── Daily Streak Popup ── */}
-      {showStreak&&(
+      {showStreak&&streakDays.length>0&&(
         <div style={{position:"fixed",inset:0,zIndex:9998,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,0.88)",backdropFilter:"blur(4px)"}} onClick={()=>setShowStreak(false)}>
           <div onClick={e=>e.stopPropagation()} style={{background:"linear-gradient(135deg,#0d1117,#141a0f)",border:`2px solid ${T.gold}`,borderRadius:20,padding:"20px 16px",maxWidth:400,width:"94%",maxHeight:"85vh",overflowY:"auto",boxShadow:`0 0 50px rgba(245,200,66,0.25)`,animation:"popIn 0.4s cubic-bezier(0.175,0.885,0.32,1.275)"}}>
             <div style={{textAlign:"center",marginBottom:16}}>
