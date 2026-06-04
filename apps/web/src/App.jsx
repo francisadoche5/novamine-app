@@ -383,6 +383,9 @@ export default function NovaMine(){
   const [claimedMilestones, setClaimedMilestones] = useState([]);
   const [minWithdrawTon, setMinWithdrawTon] = useState(2.0);
   const [showGift, setShowGift] = useState(false);
+  const [showStreak, setShowStreak] = useState(false);
+  const [streakDays, setStreakDays] = useState([]);   // array of {day, nova, ton, claimed}
+  const [streakLoading, setStreakLoading] = useState(false);
   const [giftOpened, setGiftOpened] = useState(false);
   const [welcomeTon, setWelcomeTon] = useState(1.5);
   const [giftParticles, setGiftParticles] = useState([]);
@@ -407,6 +410,15 @@ export default function NovaMine(){
             setShowGift(true);
           }
         }
+        // Load daily streak — show popup if today not yet claimed
+        try {
+          const sd = await api.getStreak();
+          if (sd?.days) {
+            setStreakDays(sd.days);
+            const today = sd.days.find(d => d.isToday);
+            if (today && !today.claimed) setShowStreak(true);
+          }
+        } catch(_) {}
         const data = await api.me();
         if(data?.user){
           const realNova = Number(data.user.nova ?? 0);
@@ -902,6 +914,55 @@ export default function NovaMine(){
   return(
     <div style={{background:T.bg,minHeight:"100vh",maxWidth:430,margin:"0 auto",fontFamily:"'Rajdhani',sans-serif",color:T.text,position:"relative",overflow:"hidden"}}>
       <style>{css}</style>
+
+      {/* ── Daily Streak Popup ── */}
+      {showStreak&&(
+        <div style={{position:"fixed",inset:0,zIndex:9998,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,0.88)",backdropFilter:"blur(4px)"}} onClick={()=>setShowStreak(false)}>
+          <div onClick={e=>e.stopPropagation()} style={{background:"linear-gradient(135deg,#0d1117,#141a0f)",border:`2px solid ${T.gold}`,borderRadius:20,padding:"20px 16px",maxWidth:400,width:"94%",maxHeight:"85vh",overflowY:"auto",boxShadow:`0 0 50px rgba(245,200,66,0.25)`,animation:"popIn 0.4s cubic-bezier(0.175,0.885,0.32,1.275)"}}>
+            <div style={{textAlign:"center",marginBottom:16}}>
+              <div style={{fontSize:32,marginBottom:4}}>🗓️</div>
+              <div style={{fontFamily:"'Orbitron'",fontSize:14,color:T.gold,letterSpacing:2,marginBottom:2}}>DAILY REWARDS</div>
+              <div style={{fontSize:12,color:T.muted}}>Claim your reward each day this month</div>
+            </div>
+            {/* 30-day grid */}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6,marginBottom:16}}>
+              {streakDays.map(d=>{
+                const isTon = d.ton > 0;
+                const label = isTon ? `${d.ton}T` : `${d.nova>=1000?`${d.nova/1000}K`:d.nova}`;
+                return(
+                <div key={d.day} onClick={async()=>{
+                  if(!d.isToday||d.claimed) return;
+                  try{
+                    const r = await api.claimStreak(d.day);
+                    if(r?.ok){
+                      setStreakDays(p=>p.map(x=>x.day===d.day?{...x,claimed:true}:x));
+                      if(r.nova) setNova(p=>p+r.nova);
+                      if(r.ton)  setTonBalance(p=>p+r.ton);
+                      setTimeout(()=>setShowStreak(false),1200);
+                    }
+                  }catch(e){alert(e?.message??"Failed");}
+                }} style={{
+                  background: d.claimed?"rgba(57,255,138,0.08)": d.isToday?"rgba(245,200,66,0.15)":"rgba(255,255,255,0.03)",
+                  border:`1px solid ${d.claimed?T.green:d.isToday?T.gold:"#1e2a1e"}`,
+                  borderRadius:10,padding:"8px 4px",textAlign:"center",
+                  cursor:d.isToday&&!d.claimed?"pointer":"default",
+                  opacity:d.isPast&&!d.claimed?0.35:1,
+                  transform:d.isToday&&!d.claimed?"scale(1.05)":"scale(1)",
+                  transition:"transform 0.2s",
+                }}>
+                  <div style={{fontSize:9,color:d.claimed?T.green:d.isToday?T.gold:T.muted,fontFamily:"'Orbitron'",marginBottom:2}}>D{d.day}</div>
+                  <div style={{fontSize:d.isToday?14:11,fontWeight:700,color:d.claimed?T.green:isTon?"#4da6ff":T.gold}}>{d.claimed?"✓":label}</div>
+                  {d.isToday&&!d.claimed&&<div style={{fontSize:8,color:T.gold,marginTop:2}}>TAP</div>}
+                </div>
+                );
+              })}
+            </div>
+            <button onClick={()=>setShowStreak(false)} style={{width:"100%",background:"transparent",border:`1px solid #1e2a1e`,borderRadius:10,padding:"10px",color:T.muted,fontFamily:"'Rajdhani'",fontSize:13,cursor:"pointer"}}>
+              Close
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Gift Popup ── */}
       {showGift&&(
