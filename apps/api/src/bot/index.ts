@@ -5,6 +5,7 @@
 import { Bot, webhookCallback } from "grammy";
 import type { Express } from "express";
 import { config } from "../config.js";
+import { supabaseAdmin } from "../lib/supabase.js";
 
 export async function startBot(app: Express) {
   if (!config.bot.token) {
@@ -68,6 +69,108 @@ export async function startBot(app: Express) {
   bot.on("message", async (ctx) => {
     await ctx.reply("Tap /start to open NovaMine.");
   });
+
+  // ── Notification Schedulers ─────────────────────────────────────────────────
+
+  // Runs every 5 minutes — checks for unclaimed mining sessions > 1 hour old
+  // and users who haven't logged in for > 24 hours
+  async function runNotifications() {
+    if (!config.isProd) return; // only in production
+    try {
+      const now = new Date();
+
+      // ── 1. Unclaimed mining reminder (session > 1 hour old) ──
+      const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000).toISOString();
+      const { data: miningSessions } = await supabaseAdmin
+        .from("mining_sessions")
+        .select("user_id, claim_ready_at, users!inner(telegram_id, first_name, notified_mining_at)")
+        .lt("claim_ready_at", oneHourAgo)
+        .is("claimed_at", null);
+
+      for (const session of (miningSessions ?? [])) {
+        const u = (session as any).users;
+        if (!u?.telegram_id) continue;
+
+        // Don't spam — only notify once per hour per user
+        const lastNotified = u.notified_mining_at ? new Date(u.notified_mining_at) : null;
+        if (lastNotified && now.getTime() - lastNotified.getTime() < 60 * 60 * 1000) continue;
+
+        try {
+          await bot.api.sendMessage(
+            u.telegram_id,
+            `⛏️ *Hey ${u.first_name ?? "Miner"}!*
+
+Your NOVA mining session is ready to collect! Don't let it sit — tap below to claim your rewards now.`,
+            {
+              parse_mode: "Markdown",
+              reply_markup: {
+                inline_keyboard: [[{
+                  text: "⚡ Claim NOVA Now",
+                  url: config.bot.username
+                    ? `https://t.me/${config.bot.username}/app`
+                    : config.bot.publicUrl,
+                }]],
+              },
+            }
+          );
+          // Update notified_mining_at
+          await supabaseAdmin
+            .from("users")
+            .update({ notified_mining_at: now.toISOString() })
+            .eq("id", session.user_id);
+        } catch (_) { /* user may have blocked the bot */ }
+      }
+
+      // ── 2. Inactivity reminder (no login for > 24 hours) ──
+      const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+      const { data: inactiveUsers } = await supabaseAdmin
+        .from("users")
+        .select("id, telegram_id, first_name, last_seen_at, notified_inactive_at")
+        .lt("last_seen_at", oneDayAgo)
+        .not("telegram_id", "is", null);
+
+      for (const u of (inactiveUsers ?? [])) {
+        if (!u.telegram_id) continue;
+
+        // Don't re-notify within 24 hours of last inactive notification
+        const lastNotified = u.notified_inactive_at ? new Date(u.notified_inactive_at) : null;
+        if (lastNotified && now.getTime() - lastNotified.getTime() < 24 * 60 * 60 * 1000) continue;
+
+        try {
+          await bot.api.sendMessage(
+            u.telegram_id,
+            `🌟 *Miss you, ${u.first_name ?? "Miner"}!*
+
+You haven't logged into NovaMine today. Your mining is waiting and daily rewards are ready to claim!
+
+Tap below to get back on track.`,
+            {
+              parse_mode: "Markdown",
+              reply_markup: {
+                inline_keyboard: [[{
+                  text: "🚀 Open NovaMine",
+                  url: config.bot.username
+                    ? `https://t.me/${config.bot.username}/app`
+                    : config.bot.publicUrl,
+                }]],
+              },
+            }
+          );
+          await supabaseAdmin
+            .from("users")
+            .update({ notified_inactive_at: now.toISOString() })
+            .eq("id", u.id);
+        } catch (_) { /* user may have blocked the bot */ }
+      }
+    } catch (err) {
+      console.error("[bot] notification scheduler error:", err);
+    }
+  }
+
+  // Run every 5 minutes (UptimeRobot keeps the server alive)
+  setInterval(runNotifications, 5 * 60 * 1000);
+  // Also run once on startup after a short delay
+  setTimeout(runNotifications, 30 * 1000);
 
   // ── Bootstrap webhook (prod) or long-poll (dev) ──
   if (config.isProd && config.bot.publicUrl) {
