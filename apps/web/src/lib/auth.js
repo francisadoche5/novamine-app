@@ -1,7 +1,7 @@
 // Auth flow:
 // 1. Read initData from the Telegram WebApp (or dev mock)
 // 2. POST it to our Render API → server validates HMAC against BOT_TOKEN
-// 3. Server returns { accessToken, refreshToken, user }
+// 3. Server returns { accessToken, refreshToken, user, isNewUser, giftClaimed, welcomeTon }
 // 4. We store the access token for the API client and prime the Supabase session
 //    so subsequent supabase.from(...) calls run as the authenticated user.
 import { getInitData, getTelegramUser } from "./telegram.js";
@@ -28,13 +28,16 @@ export async function authenticate() {
 
   const result = await api.authTelegram(initData, startParam);
 
-  // result shape (defined by api): { accessToken, refreshToken, user }
+  // result shape: { accessToken, refreshToken, user, isNewUser, giftClaimed, welcomeTon }
   setApiToken(result.accessToken);
   await setSupabaseSession(result.accessToken, result.refreshToken);
 
   currentSession = {
     accessToken: result.accessToken,
-    user: result.user ?? getTelegramUser(),
+    user:        result.user ?? getTelegramUser(),
+    isNewUser:   result.isNewUser   ?? false,  // FIX: was silently dropped before
+    giftClaimed: result.giftClaimed ?? true,   // FIX: was silently dropped before
+    welcomeTon:  result.welcomeTon  ?? 1.5,    // FIX: was silently dropped before
   };
   return currentSession;
 }
