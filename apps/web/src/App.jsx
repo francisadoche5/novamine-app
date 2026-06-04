@@ -516,7 +516,7 @@ export default function NovaMine(){
             const sd = await api.getStreak();
             if (sd?.days && sd.days.length > 0) {
               setStreakDays(sd.days);
-              const today = sd.days.find((d: any) => d.isToday);
+              const today = sd.days.find(d => d.isToday);
               if (today && !today.claimed) setShowStreak(true);
             }
           } catch(_) {}
