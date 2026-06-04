@@ -105,7 +105,9 @@ authRouter.post("/telegram", async (req, res, next) => {
       username: tg.username,
     });
 
-    // Fetch gift_claimed flag and welcome amount to send to frontend
+    // Fetch gift_claimed flag and welcome amount to send to frontend.
+    // FIX: for brand-new users we already know gift_claimed is false — don't
+    // rely on the re-read which can race and return the wrong value.
     const { data: freshUser } = await supabaseAdmin
       .from("users")
       .select("gift_claimed, ton_balance")
@@ -121,7 +123,10 @@ authRouter.post("/telegram", async (req, res, next) => {
       refreshToken: accessToken,
       isNewUser: !existing,
       welcomeTon: welcomeTonAmount,
-      giftClaimed: freshUser?.gift_claimed ?? true,
+      // FIX: new users always get false (gift not yet claimed), regardless of
+      // whether the re-read raced. Existing users fall back to true (safe —
+      // suppresses the popup if the read somehow fails).
+      giftClaimed: existing ? (freshUser?.gift_claimed ?? true) : false,
       user: {
         id: userId,
         telegramId: tg.id,
