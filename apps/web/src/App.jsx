@@ -7,344 +7,15 @@ import { api } from "./lib/api.js";
 import { supabase } from "./lib/supabase.js";
 import { miningPowerFromNova, tierFromNova, MINING } from "@novamine/shared";
 import { useTonConnectUI, useTonAddress, TonConnectButton } from "@tonconnect/ui-react";
+import { T, css, diceDots, diceColors } from "./constants/theme.js";
+import Icon from "./components/Icon.jsx";
+import DiceFace from "./components/DiceFace.jsx";
+import SwapModal from "./components/SwapModal.jsx";
+import WithdrawModal from "./components/WithdrawModal.jsx";
+import StreakPopup from "./components/StreakPopup.jsx";
+import GiftPopup from "./components/GiftPopup.jsx";
+import { genActivity } from "./lib/activityFeed.js";
 
-const T = {
-  bg:"#080b0f", card:"#0d1117", gold:"#f5c842", goldDim:"#c9a227",
-  goldGlow:"rgba(245,200,66,0.18)", goldFaint:"rgba(245,200,66,0.07)",
-  green:"#39ff8a", greenDim:"#1a7a42", text:"#f0ede6", muted:"#6b7a6b",
-  red:"#ff4d4d", blue:"#4da6ff",
-};
-
-const ALL_USERS = [
-  "MikeCarterX","JoaoSilva99","EmilyJOfficial","SantosGabriel_","AshleyWave",
-  "LucasOliveira7","DanielB_Pro","RafaCostaX","JessicaMLive","BrunoFps",
-  "ChrisDZone","MatheusPlayz","AmandaGlow","FelipeRider","BrandonElite",
-  "ThiagoVibes","SamTaylorXO","PedroLegend","RyanAces","VictorRush",
-  "OliviaDreams","CaioStorm","EthanPrime","HenriqueYT","ChloeMagic",
-  "AndreFlex","NathanVolt","EduardoKing","MadisonStar","LeoMeloX",
-  "JustinNova","VinnyPereira","SophiaLux","DiegoMotion","TylerSync",
-  "MarceloWave","IsabellaSky","GustavoFire","KevinRise","RicardoFlow"
-];
-
-const css = `
-  @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@400;500;600;700&display=swap');
-  *{box-sizing:border-box;margin:0;padding:0;}
-  body{background:#080b0f;}
-  ::-webkit-scrollbar{width:4px;}
-  ::-webkit-scrollbar-track{background:#080b0f;}
-  ::-webkit-scrollbar-thumb{background:#c9a227;border-radius:2px;}
-  @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
-  @keyframes glow{0%,100%{box-shadow:0 0 8px rgba(245,200,66,0.18)}50%{box-shadow:0 0 32px rgba(245,200,66,0.4)}}
-  @keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
-  @keyframes scanline{0%{transform:translateY(-100%)}100%{transform:translateY(100vh)}}
-  @keyframes reelSpin{0%{transform:translateY(-6px)}50%{transform:translateY(6px)}100%{transform:translateY(-6px)}}
-  @keyframes diceRoll{0%{transform:rotate(0deg) scale(1)}25%{transform:rotate(90deg) scale(1.1)}50%{transform:rotate(180deg) scale(0.9)}75%{transform:rotate(270deg) scale(1.1)}100%{transform:rotate(360deg) scale(1)}}
-  @keyframes float{0%,100%{transform:translateY(0px)}50%{transform:translateY(-6px)}}
-  @keyframes float{0%,100%{transform:translateY(0) rotate(-5deg)}50%{transform:translateY(-12px) rotate(5deg)}}
-@keyframes particle{0%{transform:scale(1);opacity:1}100%{transform:scale(0) translate(20px,-40px);opacity:0}}
-@keyframes popIn{0%{transform:scale(0.6);opacity:0}80%{transform:scale(1.08)}100%{transform:scale(1);opacity:1}}
-  @keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
-  @keyframes activitySlide{from{transform:translateY(-40px);opacity:0}to{transform:translateY(0);opacity:1}}
-  @keyframes tickerScroll{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
-  @keyframes swapPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
-  .nav-btn{transition:all 0.2s;}
-  .btn-gold{transition:all 0.2s;}
-  .btn-gold:hover:not(:disabled){transform:translateY(-1px);filter:brightness(1.1);}
-  .card-hover{transition:all 0.25s;cursor:pointer;}
-  .card-hover:hover{transform:translateY(-2px);border-color:#c9a227 !important;box-shadow:0 8px 32px rgba(245,200,66,0.18) !important;}
-  .activity-item{animation:activitySlide 0.4s ease;}
-  .prize-card{transition:all 0.15s;}
-  .prize-card:hover{transform:scale(1.04);}
-  .shimmer-btn{background:linear-gradient(90deg,#f5c842 0%,#fff8d6 40%,#f5c842 60%,#c9a227 100%);background-size:200% 100%;animation:shimmer 2s linear infinite;}
-  .swap-card{animation:swapPulse 2s ease-in-out infinite;}
-  @keyframes adProgress{from{width:0%}to{width:100%}}
-  @keyframes adFadeIn{from{opacity:0;transform:scale(0.95)}to{opacity:1;transform:scale(1)}}
-  @keyframes adSkipPulse{0%,100%{box-shadow:0 0 0 0 rgba(245,200,66,0.4)}50%{box-shadow:0 0 0 8px rgba(245,200,66,0)}}
-  @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
-  @keyframes ringPulse{0%,100%{opacity:0.6;transform:scale(1)}50%{opacity:1;transform:scale(1.02)}}
-`;
-
-const Icon = ({name,size=20})=>{
-  const icons={
-    zap:<svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>,
-    shop:<svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>,
-    trophy:<svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-1a2 2 0 012-2h16a2 2 0 012 2v1a2 2 0 01-2 2h-2"/><rect x="6" y="18" width="12" height="4"/></svg>,
-    users:<svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>,
-    tasks:<svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>,
-    copy:<svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>,
-    share:<svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>,
-    cpu:<svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg>,
-    swap:<svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>,
-    check:<svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>,
-    lock:<svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>,
-    withdraw:<svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2v20M2 12h20"/><path d="M17 7l-5-5-5 5"/></svg>,
-    info:<svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>,
-    arrowRight:<svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>,
-  };
-  return icons[name]||null;
-};
-
-const diceDots={1:[[50,50]],2:[[25,25],[75,75]],3:[[25,25],[50,50],[75,75]],4:[[25,25],[75,25],[25,75],[75,75]],5:[[25,25],[75,25],[50,50],[25,75],[75,75]],6:[[25,25],[75,25],[25,50],[75,50],[25,75],[75,75]]};
-const diceColors={1:"#ef4444",2:"#f97316",3:"#eab308",4:"#22c55e",5:"#3b82f6",6:"#a855f7"};
-
-function DiceFace({value,size=80}){
-  const dots=diceDots[value]||diceDots[1];
-  return(
-    <svg width={size} height={size} viewBox="0 0 100 100">
-      <defs><linearGradient id={`dg${value}`} x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stopColor={diceColors[value]}/><stop offset="100%" stopColor={diceColors[value]} stopOpacity="0.7"/></linearGradient></defs>
-      <rect x="4" y="4" width="92" height="92" rx="20" fill={`url(#dg${value})`} stroke="rgba(255,255,255,0.15)" strokeWidth="1.5"/>
-      <rect x="6" y="6" width="88" height="30" rx="16" fill="rgba(255,255,255,0.08)"/>
-      {dots.map(([cx,cy],i)=><circle key={i} cx={cx} cy={cy} r="9" fill="white" opacity="0.95"/>)}
-    </svg>
-  );
-}
-
-function SlotReel({symbol,spinning}){
-  return(
-    <div style={{width:86,height:86,borderRadius:12,background:"linear-gradient(145deg,#0a1a0a,#061206)",border:`1px solid ${spinning?T.gold:"#1e3a1e"}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:38,boxShadow:spinning?`0 0 16px ${T.goldGlow},inset 0 2px 8px rgba(0,0,0,0.6)`:"inset 0 2px 8px rgba(0,0,0,0.6)",animation:spinning?"reelSpin 0.1s linear infinite":"none",transition:"border-color 0.3s,box-shadow 0.3s"}}>
-      {symbol}
-    </div>
-  );
-}
-
-// ── Activity feed - sequential, cycles 1→40→1
-let actIdx=0;
-function genActivity(){
-  const u=ALL_USERS[actIdx%ALL_USERS.length]; actIdx++;
-  const types=[
-    {icon:"⛏️",color:T.green, text:`${u} mined`,   value:`+${(Math.random()*0.002+0.0001).toFixed(6)} TON`},
-    {icon:"💰",color:T.gold,  text:`${u} withdrew`, value:`${(Math.random()*2+0.8).toFixed(2)} TON`},
-    {icon:"⚡",color:T.blue,  text:`${u} bought`,   value:`${["100K","500K","1.25M"][Math.floor(Math.random()*3)]} NOVA`},
-    {icon:"🚀",color:"#c084fc",text:`${u} invited`,  value:`a new member`},
-    {icon:"🎰",color:T.gold,  text:`${u} won`,      value:`${[3,10,25][Math.floor(Math.random()*3)]} NOVA on slots`},
-    {icon:"🎲",color:T.green, text:`${u} rolled`,   value:`50 NOVA!`},
-  ];
-  return {...types[Math.floor(Math.random()*types.length)],time:"just now",id:Date.now()+Math.random()};
-}
-
-// ── SWAP MODAL ────────────────────────────────────────────────────────────────
-function SwapModal({onClose,hashes,onSwapComplete}){
-  const [amount,setAmount]=useState("");
-  const [swapping,setSwapping]=useState(false);
-  const [swapError,setSwapError]=useState(null);
-  const rate=0.00001440;
-  const tonOut=amount?(parseFloat(amount)*rate).toFixed(8):"0.00000000";
-
-  async function handleConfirmSwap(){
-    const amountNum=parseFloat(amount);
-    if(!amountNum||amountNum<=0)return;
-    if(amountNum>hashes){setSwapError("Amount exceeds your available hashes.");return;}
-    setSwapping(true);setSwapError(null);
-    try{
-      const result=await api.swap(amountNum);
-      if(onSwapComplete)onSwapComplete(result);
-      onClose();
-    }catch(e){
-      setSwapError(e?.message||"Swap failed. Please try again.");
-    }finally{setSwapping(false);}
-  }
-
-  return(
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",zIndex:1000,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
-      <div onClick={e=>e.stopPropagation()} style={{background:T.card,border:`1px solid ${T.goldDim}`,borderRadius:"24px 24px 0 0",padding:24,width:"100%",maxWidth:430,animation:"slideUp 0.3s ease",boxShadow:`0 -8px 40px ${T.goldGlow}`}}>
-        <div style={{width:40,height:4,background:"#2a2a2a",borderRadius:2,margin:"0 auto 20px"}}/>
-        <div style={{fontFamily:"'Orbitron'",fontWeight:700,fontSize:18,color:T.gold,marginBottom:4}}>SWAP HASHES → TON</div>
-        <div style={{fontSize:13,color:T.muted,marginBottom:20}}>Convert your mined hashes to TON</div>
-
-        {/* Rate info */}
-        <div style={{background:T.goldFaint,border:`1px solid ${T.goldDim}`,borderRadius:12,padding:14,marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-          <div style={{fontSize:12,color:T.muted}}>Exchange Rate</div>
-          <div style={{fontFamily:"'Orbitron'",fontSize:12,color:T.gold,fontWeight:700}}>1 HASH = {rate} TON</div>
-        </div>
-
-        {/* From */}
-        <div style={{background:"rgba(0,0,0,0.4)",border:"1px solid #1e2a1e",borderRadius:12,padding:14,marginBottom:8}}>
-          <div style={{fontSize:11,color:T.muted,marginBottom:6,letterSpacing:1}}>FROM (NOVA Hashes)</div>
-          <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <input
-              type="number"
-              placeholder="0.00"
-              value={amount}
-              onChange={e=>{setAmount(e.target.value);setSwapError(null);}}
-              style={{flex:1,background:"transparent",border:"none",outline:"none",fontFamily:"'Orbitron'",fontSize:22,fontWeight:700,color:T.text,width:"100%"}}
-            />
-            <button onClick={()=>setAmount(hashes.toFixed(8))} style={{background:T.goldFaint,border:`1px solid ${T.goldDim}`,borderRadius:8,padding:"4px 10px",color:T.gold,fontSize:11,cursor:"pointer",fontFamily:"'Rajdhani'",fontWeight:700}}>MAX</button>
-          </div>
-          <div style={{fontSize:11,color:T.muted,marginTop:4}}>Available: {hashes.toFixed(8)} HASHES</div>
-        </div>
-
-        {/* Arrow */}
-        <div style={{textAlign:"center",color:T.gold,marginBottom:8}}>↕</div>
-
-        {/* To */}
-        <div style={{background:"rgba(57,255,138,0.05)",border:`1px solid ${T.greenDim}`,borderRadius:12,padding:14,marginBottom:20}}>
-          <div style={{fontSize:11,color:T.muted,marginBottom:6,letterSpacing:1}}>YOU RECEIVE (TON)</div>
-          <div style={{fontFamily:"'Orbitron'",fontSize:22,fontWeight:700,color:T.green}}>{tonOut}</div>
-          <div style={{fontSize:11,color:T.muted,marginTop:4}}>TON Network</div>
-        </div>
-
-        {swapError&&<div style={{background:"rgba(255,77,77,0.08)",border:"1px solid rgba(255,77,77,0.3)",borderRadius:10,padding:"10px 14px",marginBottom:12,fontSize:12,color:T.red}}>{swapError}</div>}
-
-        <button className="btn-gold shimmer-btn" onClick={handleConfirmSwap} disabled={swapping||!amount} style={{width:"100%",padding:16,border:"none",borderRadius:14,fontFamily:"'Rajdhani'",fontWeight:700,fontSize:16,cursor:swapping?"not-allowed":"pointer",color:"#000",opacity:(!amount||swapping)?0.7:1}}>
-          {swapping?"⏳ Swapping…":"⚡ Confirm Swap"}
-        </button>
-        <div style={{textAlign:"center",fontSize:11,color:T.muted,marginTop:10}}>You must swap HASHES → TON before withdrawing</div>
-      </div>
-    </div>
-  );
-}
-
-// ── WITHDRAW MODAL ─────────────────────────────────────────────────────────────
-// Step 1: Check if user has ≥ minWithdrawTon
-// Step 2: Check referral requirement
-function WithdrawModal({onClose,tonBalance,qualifiedFriends,onGoSwap,onInvite,onWithdrawComplete,minWithdrawTon}){
-  const MIN=minWithdrawTon??2.0;
-  const NEEDED=5;
-  const hasMin=tonBalance>=MIN;
-  const hasRefs=qualifiedFriends>=NEEDED;
-  const [walletAddress,setWalletAddress]=useState("");
-  const [withdrawing,setWithdrawing]=useState(false);
-  const [withdrawError,setWithdrawError]=useState(null);
-  const [withdrawDone,setWithdrawDone]=useState(false);
-
-  async function handleWithdraw(){
-    if(!walletAddress.trim()){setWithdrawError("Please enter your TON wallet address.");return;}
-    setWithdrawing(true);setWithdrawError(null);
-    try{
-      await api.requestWithdraw(tonBalance, walletAddress.trim());
-      setWithdrawDone(true);
-      if(onWithdrawComplete)onWithdrawComplete();
-    }catch(e){
-      setWithdrawError(e?.message||"Withdrawal request failed. Please try again.");
-    }finally{setWithdrawing(false);}
-  }
-
-  // Step 1 — minimum balance gate
-  if(!hasMin){
-    return(
-      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",zIndex:1000,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
-        <div onClick={e=>e.stopPropagation()} style={{background:T.card,border:"1px solid #1e2a1e",borderRadius:"24px 24px 0 0",padding:24,width:"100%",maxWidth:430,animation:"slideUp 0.3s ease"}}>
-          <div style={{width:40,height:4,background:"#2a2a2a",borderRadius:2,margin:"0 auto 20px"}}/>
-          <div style={{textAlign:"center",marginBottom:20}}>
-            <div style={{fontSize:48,marginBottom:12}}>🔒</div>
-            <div style={{fontFamily:"'Orbitron'",fontWeight:700,fontSize:18,color:T.gold,marginBottom:8}}>NOT ENOUGH TON</div>
-            <div style={{fontSize:13,color:T.muted,lineHeight:1.6}}>You need a minimum of <span style={{color:T.gold,fontWeight:700}}>{MIN} TON</span> to withdraw.<br/>Keep mining and swapping NOVA to grow your balance.</div>
-          </div>
-
-          {/* Balance bar */}
-          <div style={{background:"rgba(0,0,0,0.4)",border:"1px solid #1e2a1e",borderRadius:14,padding:16,marginBottom:16}}>
-            <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
-              <span style={{fontSize:12,color:T.muted}}>Your TON balance</span>
-              <span style={{fontFamily:"'Orbitron'",fontSize:12,color:T.red,fontWeight:700}}>{tonBalance.toFixed(5)} TON</span>
-            </div>
-            <div style={{background:"#1a1a1a",borderRadius:6,height:8,overflow:"hidden",marginBottom:6}}>
-              <div style={{width:`${Math.min((tonBalance/MIN)*100,100)}%`,height:"100%",background:`linear-gradient(90deg,${T.red},${T.gold})`,borderRadius:6,transition:"width 0.5s"}}/>
-            </div>
-            <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:T.muted}}>
-              <span>0 TON</span>
-              <span style={{color:T.gold}}>Min: {MIN} TON</span>
-            </div>
-          </div>
-
-          <div style={{display:"flex",flexDirection:"column",gap:8}}>
-            <button className="btn-gold" onClick={()=>{onClose();onGoSwap();}} style={{width:"100%",padding:14,background:`linear-gradient(135deg,${T.gold},${T.goldDim})`,border:"none",borderRadius:12,fontFamily:"'Rajdhani'",fontWeight:700,fontSize:15,cursor:"pointer",color:"#000",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-              <Icon name="swap" size={16}/> Swap HASHES → TON
-            </button>
-            <button onClick={onClose} style={{width:"100%",padding:12,background:"transparent",border:"1px solid #1e2a1e",borderRadius:12,fontFamily:"'Rajdhani'",fontWeight:600,fontSize:14,cursor:"pointer",color:T.muted}}>
-              Keep Mining
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Step 2 — referral gate
-  return(
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",zIndex:1000,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
-      <div onClick={e=>e.stopPropagation()} style={{background:T.card,border:`1px solid ${hasRefs?T.goldDim:"#1e2a1e"}`,borderRadius:"24px 24px 0 0",padding:24,width:"100%",maxWidth:430,animation:"slideUp 0.3s ease",boxShadow:hasRefs?`0 -8px 40px ${T.goldGlow}`:"none"}}>
-        <div style={{width:40,height:4,background:"#2a2a2a",borderRadius:2,margin:"0 auto 20px"}}/>
-        <div style={{fontFamily:"'Orbitron'",fontWeight:700,fontSize:18,color:T.gold,marginBottom:4}}>WITHDRAW TON</div>
-        <div style={{fontSize:13,color:T.muted,marginBottom:20}}>Minimum withdrawal: {MIN} TON</div>
-
-        {/* Balance */}
-        <div style={{background:"rgba(57,255,138,0.05)",border:`1px solid ${T.greenDim}`,borderRadius:12,padding:14,marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-          <div>
-            <div style={{fontSize:11,color:T.muted,marginBottom:2}}>Available TON balance</div>
-            <div style={{fontFamily:"'Orbitron'",fontWeight:900,fontSize:22,color:T.green}}>{tonBalance.toFixed(5)} TON</div>
-          </div>
-          <div style={{fontSize:28}}>✅</div>
-        </div>
-
-        {/* Referral requirement */}
-        <div style={{background:hasRefs?"rgba(57,255,138,0.06)":T.goldFaint,border:`1px solid ${hasRefs?T.greenDim:T.goldDim}`,borderRadius:16,padding:18,marginBottom:16}}>
-          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
-            <span style={{color:hasRefs?T.green:T.gold}}><Icon name={hasRefs?"check":"lock"} size={18}/></span>
-            <div>
-              <div style={{fontWeight:700,fontSize:14,color:hasRefs?T.green:T.gold}}>Referral Requirement</div>
-              <div style={{fontSize:12,color:T.muted}}>Need 5 active friends to unlock withdrawal</div>
-            </div>
-          </div>
-          <div style={{background:"rgba(0,0,0,0.4)",borderRadius:8,height:8,marginBottom:8,overflow:"hidden"}}>
-            <div style={{width:`${(qualifiedFriends/NEEDED)*100}%`,height:"100%",background:`linear-gradient(90deg,${T.gold},${T.green})`,borderRadius:8,transition:"width 0.5s"}}/>
-          </div>
-          <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:12}}>
-            <span style={{color:T.muted}}>{qualifiedFriends} of {NEEDED} active friends</span>
-            <span style={{color:hasRefs?T.green:T.gold,fontWeight:700}}>{hasRefs?"✓ Unlocked":"Locked"}</span>
-          </div>
-          <div style={{background:"rgba(0,0,0,0.3)",borderRadius:10,padding:12}}>
-            <div style={{fontSize:10,color:T.muted,marginBottom:6,letterSpacing:1,fontFamily:"'Orbitron'"}}>ACTIVE FRIEND MEANS:</div>
-            <div style={{fontSize:12,color:T.text,display:"flex",flexDirection:"column",gap:4}}>
-              <span>✅ Joined via your referral link</span>
-              <span>✅ Has logged in at least once</span>
-              <span>✅ Mined for <span style={{color:T.gold,fontWeight:700}}>10+ days</span> this month</span>
-            </div>
-          </div>
-        </div>
-
-        {hasRefs?(
-          withdrawDone?(
-            <div style={{background:"rgba(57,255,138,0.08)",border:`1px solid ${T.greenDim}`,borderRadius:14,padding:20,textAlign:"center"}}>
-              <div style={{fontSize:32,marginBottom:8}}>✅</div>
-              <div style={{fontFamily:"'Orbitron'",fontWeight:700,fontSize:15,color:T.green,marginBottom:4}}>Request Submitted!</div>
-              <div style={{fontSize:12,color:T.muted}}>Admin will process your withdrawal within 24h.</div>
-            </div>
-          ):(
-            <div style={{display:"flex",flexDirection:"column",gap:10}}>
-              <div style={{background:"rgba(0,0,0,0.4)",border:"1px solid #1e2a1e",borderRadius:12,padding:14}}>
-                <div style={{fontSize:11,color:T.muted,marginBottom:6,letterSpacing:1}}>YOUR TON WALLET ADDRESS</div>
-                <input
-                  type="text"
-                  placeholder="UQ... or EQ..."
-                  value={walletAddress}
-                  onChange={e=>{setWalletAddress(e.target.value);setWithdrawError(null);}}
-                  style={{width:"100%",background:"transparent",border:"none",outline:"none",fontFamily:"'Rajdhani'",fontSize:14,fontWeight:600,color:T.text}}
-                />
-              </div>
-              {withdrawError&&<div style={{background:"rgba(255,77,77,0.08)",border:"1px solid rgba(255,77,77,0.3)",borderRadius:10,padding:"10px 14px",fontSize:12,color:T.red}}>{withdrawError}</div>}
-              <button className="shimmer-btn btn-gold" onClick={handleWithdraw} disabled={withdrawing||!walletAddress.trim()} style={{width:"100%",padding:16,border:"none",borderRadius:14,fontFamily:"'Rajdhani'",fontWeight:700,fontSize:16,cursor:withdrawing?"not-allowed":"pointer",color:"#000",opacity:(!walletAddress.trim()||withdrawing)?0.7:1}}>
-                {withdrawing?"⏳ Submitting…":"⚡ Withdraw to Wallet"}
-              </button>
-              <div style={{textAlign:"center",fontSize:11,color:T.muted}}>Amount: {tonBalance.toFixed(5)} TON · Processed within 24h</div>
-            </div>
-          )
-        ):(
-          <div style={{display:"flex",flexDirection:"column",gap:8}}>
-            <div style={{background:"rgba(255,77,77,0.06)",border:"1px solid rgba(255,77,77,0.2)",borderRadius:12,padding:14,display:"flex",gap:10,alignItems:"flex-start"}}>
-              <span style={{color:T.red,flexShrink:0,marginTop:1}}><Icon name="info" size={16}/></span>
-              <div style={{fontSize:12,color:T.muted,lineHeight:1.6}}>
-                You still need <span style={{color:T.gold,fontWeight:700}}>{NEEDED-qualifiedFriends} more active friend{NEEDED-qualifiedFriends!==1?"s":""}</span>. Ask them to mine for 10 days this month to qualify.
-              </div>
-            </div>
-            <button onClick={()=>{onClose();onInvite&&onInvite();}} className="btn-gold" style={{width:"100%",padding:14,background:`linear-gradient(135deg,${T.gold},${T.goldDim})`,border:"none",borderRadius:12,fontFamily:"'Rajdhani'",fontWeight:700,fontSize:15,cursor:"pointer",color:"#000",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-              <Icon name="share" size={16}/> Invite Friends Now
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
 
 // ── MAIN APP ──────────────────────────────────────────────────────────────────
 export default function NovaMine(){
@@ -379,6 +50,7 @@ export default function NovaMine(){
   const claimReady   = miningStartedAt !== null && (Date.now() - miningStartedAt) >= MINING_DURATION_MS;
   const miningTimer=useRef(null);
   const adTimer=useRef(null);
+  const authResultRef=useRef(null);
   const [qualifiedFriends, setQualifiedFriends] = useState(0);
   const [claimedMilestones, setClaimedMilestones] = useState([]);
   const [minWithdrawTon, setMinWithdrawTon] = useState(2.0);
@@ -390,7 +62,7 @@ export default function NovaMine(){
   const [giftOpened, setGiftOpened] = useState(false);
   const [welcomeTon, setWelcomeTon] = useState(1.5);
   const [giftParticles, setGiftParticles] = useState([]);
-  const [refStats, setRefStats] = useState({total:0, valid:0, pending:0, nova:0});
+  const [refStats, setRefStats] = useState({total:0, valid:0, pending:0, nova:0, list:[]});
   const [buyingTierId, setBuyingTierId] = useState(null);
   const [buyError, setBuyError] = useState(null);
   // TonConnect — wallet for shop purchases
@@ -404,6 +76,7 @@ export default function NovaMine(){
       try {
         initTelegram();
         const authResult = await authenticate();
+        authResultRef.current = authResult;
         const data = await api.me();
         if(data?.user){
           const realNova = Number(data.user.nova ?? 0);
@@ -500,7 +173,7 @@ export default function NovaMine(){
           const pending = refData?.pending ?? 0;
           const valid   = total - pending;
           const novaEarned = (refData?.list ?? []).reduce((s,r) => s + Number(r.nova_earned ?? 0), 0);
-          setRefStats({ total, valid, pending, nova: novaEarned });
+          setRefStats({ total, valid, pending, nova: novaEarned, list: refData?.list ?? [] });
         } catch(_) {}
 
       } catch(e){
@@ -917,104 +590,47 @@ export default function NovaMine(){
       <style>{css}</style>
 
       {/* ── Daily Streak Popup ── */}
-      {showStreak&&streakDays.length>0&&(
-        <div style={{position:"fixed",inset:0,zIndex:9998,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,0.88)",backdropFilter:"blur(4px)"}} onClick={()=>setShowStreak(false)}>
-          <div onClick={e=>e.stopPropagation()} style={{background:"linear-gradient(135deg,#0d1117,#141a0f)",border:`2px solid ${T.gold}`,borderRadius:20,padding:"20px 16px",maxWidth:400,width:"94%",maxHeight:"85vh",overflowY:"auto",boxShadow:`0 0 50px rgba(245,200,66,0.25)`,animation:"popIn 0.4s cubic-bezier(0.175,0.885,0.32,1.275)"}}>
-            <div style={{textAlign:"center",marginBottom:16}}>
-              <div style={{fontSize:32,marginBottom:4}}>🗓️</div>
-              <div style={{fontFamily:"'Orbitron'",fontSize:14,color:T.gold,letterSpacing:2,marginBottom:2}}>DAILY REWARDS</div>
-              <div style={{fontSize:12,color:T.muted}}>Claim your reward each day this month</div>
-            </div>
-            {/* 30-day grid */}
-            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6,marginBottom:16}}>
-              {streakDays.map(d=>{
-                const isTon = d.ton > 0;
-                const label = isTon ? `${d.ton}T` : `${d.nova>=1000?`${d.nova/1000}K`:d.nova}`;
-                return(
-                <div key={d.day} onClick={async()=>{
-                  if(!d.isToday||d.claimed) return;
-                  try{
-                    const r = await api.claimStreak(d.day);
-                    if(r?.ok){
-                      setStreakDays(p=>p.map(x=>x.day===d.day?{...x,claimed:true}:x));
-                      if(r.nova) setNova(p=>p+r.nova);
-                      if(r.ton)  setTonBalance(p=>p+r.ton);
-                      setTimeout(()=>setShowStreak(false),1200);
-                    }
-                  }catch(e){alert(e?.message??"Failed");}
-                }} style={{
-                  background: d.claimed?"rgba(57,255,138,0.08)": d.isToday?"rgba(245,200,66,0.15)":"rgba(255,255,255,0.03)",
-                  border:`1px solid ${d.claimed?T.green:d.isToday?T.gold:"#1e2a1e"}`,
-                  borderRadius:10,padding:"8px 4px",textAlign:"center",
-                  cursor:d.isToday&&!d.claimed?"pointer":"default",
-                  opacity:d.isPast&&!d.claimed?0.35:1,
-                  transform:d.isToday&&!d.claimed?"scale(1.05)":"scale(1)",
-                  transition:"transform 0.2s",
-                }}>
-                  <div style={{fontSize:9,color:d.claimed?T.green:d.isToday?T.gold:T.muted,fontFamily:"'Orbitron'",marginBottom:2}}>D{d.day}</div>
-                  <div style={{fontSize:d.isToday?14:11,fontWeight:700,color:d.claimed?T.green:isTon?"#4da6ff":T.gold}}>{d.claimed?"✓":label}</div>
-                  {d.isToday&&!d.claimed&&<div style={{fontSize:8,color:T.gold,marginTop:2}}>TAP</div>}
-                </div>
-                );
-              })}
-            </div>
-            <button onClick={()=>setShowStreak(false)} style={{width:"100%",background:"transparent",border:`1px solid #1e2a1e`,borderRadius:10,padding:"10px",color:T.muted,fontFamily:"'Rajdhani'",fontSize:13,cursor:"pointer"}}>
-              Close
-            </button>
-          </div>
-        </div>
+      {showStreak && streakDays.length > 0 && (
+        <StreakPopup
+          streakDays={streakDays}
+          authResultRef={authResultRef}
+          onClose={() => setShowStreak(false)}
+          onDayClaimed={({ day, nova, ton }) => {
+            setStreakDays(p => p.map(x => x.day === day ? { ...x, claimed: true } : x));
+            if (nova) setNova(p => p + nova);
+            if (ton)  setTonBalance(p => p + ton);
+          }}
+          onShowGift={() => { setGiftOpened(false); setShowGift(true); }}
+          setWelcomeTon={setWelcomeTon}
+        />
       )}
 
       {/* ── Gift Popup ── */}
-      {showGift&&(
-        <div style={{position:"fixed",inset:0,zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,0.85)",backdropFilter:"blur(4px)"}}>
-          {/* Gold particles */}
-          {giftParticles.map(p=>(
-            <div key={p.id} style={{position:"absolute",left:`${p.x}%`,top:`${p.y}%`,width:p.size,height:p.size,borderRadius:"50%",background:p.color,animation:`particle ${p.dur}s ease-out forwards`,pointerEvents:"none"}}/>
-          ))}
-          <div style={{background:"linear-gradient(135deg,#0d1117,#141a0f)",border:`2px solid ${T.gold}`,borderRadius:24,padding:"36px 28px",textAlign:"center",maxWidth:320,width:"90%",boxShadow:`0 0 60px rgba(245,200,66,0.3)`,animation:"popIn 0.5s cubic-bezier(0.175,0.885,0.32,1.275)"}}>
-            {!giftOpened?(
-              <>
-                <div style={{fontSize:80,marginBottom:8,animation:"float 2s ease-in-out infinite",cursor:"pointer",display:"inline-block"}}
-                  onClick={()=>{
-                    setGiftOpened(true);
-                    // Generate gold particles burst
-                    const particles = Array.from({length:24},(_,i)=>({
-                      id:i, x:35+Math.random()*30, y:25+Math.random()*50,
-                      size:4+Math.random()*8,
-                      color:Math.random()>0.5?T.gold:"#fff",
-                      dur:0.6+Math.random()*0.8,
-                    }));
-                    setGiftParticles(particles);
-                    setTimeout(()=>setGiftParticles([]),1500);
-                    // Mark gift as claimed in DB (non-blocking)
-                    api.claimGift?.().catch(()=>{});
-                  }}>
-                  🎁
-                </div>
-                <div style={{fontFamily:"'Orbitron'",fontSize:13,color:T.gold,letterSpacing:2,marginBottom:8}}>TAP TO OPEN</div>
-                <div style={{fontSize:13,color:T.muted}}>A welcome gift is waiting for you!</div>
-              </>
-            ):(
-              <>
-                <div style={{fontSize:64,marginBottom:12,animation:"popIn 0.4s ease"}}>🎉</div>
-                <div style={{fontFamily:"'Orbitron'",fontSize:16,color:T.gold,letterSpacing:2,marginBottom:8}}>CONGRATULATIONS!</div>
-                <div style={{fontSize:14,color:T.text,marginBottom:4}}>You have received</div>
-                <div style={{fontFamily:"'Orbitron'",fontSize:32,color:T.green,fontWeight:700,marginBottom:4,textShadow:`0 0 20px rgba(57,255,138,0.5)`}}>
-                  +{welcomeTon} TON
-                </div>
-                <div style={{fontSize:12,color:T.muted,marginBottom:20}}>credited to your balance</div>
-                <button onClick={()=>{
-                  setShowGift(false);
-                  setGiftUnclaimed(false);
-                  setTonBalance(p=>p+welcomeTon);
-                }} style={{background:`linear-gradient(135deg,${T.gold},${T.goldDim})`,color:"#000",border:"none",borderRadius:12,padding:"12px 32px",fontFamily:"'Orbitron'",fontWeight:700,fontSize:13,cursor:"pointer",letterSpacing:1}}>
-                  CLAIM
-                </button>
-              </>
-            )}
-          </div>
-        </div>
+      {showGift && (
+        <GiftPopup
+          welcomeTon={welcomeTon}
+          giftOpened={giftOpened}
+          giftParticles={giftParticles}
+          onOpenGift={() => {
+            setGiftOpened(true);
+            const particles = Array.from({ length: 24 }, (_, i) => ({
+              id: i,
+              x: 35 + Math.random() * 30,
+              y: 25 + Math.random() * 50,
+              size: 4 + Math.random() * 8,
+              color: Math.random() > 0.5 ? T.gold : "#fff",
+              dur: 0.6 + Math.random() * 0.8,
+            }));
+            setGiftParticles(particles);
+            setTimeout(() => setGiftParticles([]), 1500);
+            api.claimGift?.().catch(() => {});
+          }}
+          onClaim={() => {
+            setShowGift(false);
+            setGiftUnclaimed(false);
+            setTonBalance(p => p + welcomeTon);
+          }}
+        />
       )}
       <div style={{position:"fixed",inset:0,backgroundImage:`linear-gradient(${T.goldFaint} 1px,transparent 1px),linear-gradient(90deg,${T.goldFaint} 1px,transparent 1px)`,backgroundSize:"40px 40px",pointerEvents:"none",zIndex:0}}/>
       <div style={{position:"fixed",top:0,left:0,right:0,height:2,background:`linear-gradient(90deg,transparent,${T.goldGlow},transparent)`,animation:"scanline 4s linear infinite",pointerEvents:"none",zIndex:9999}}/>
@@ -1367,11 +983,38 @@ export default function NovaMine(){
               </div>
             </div>
             <div style={{fontWeight:700,fontSize:12,letterSpacing:2,color:T.muted,fontFamily:"'Orbitron'",marginBottom:12}}>YOUR TEAM</div>
-            <div style={{background:T.card,border:"1px solid #1e2a1e",borderRadius:14,padding:24,textAlign:"center"}}>
-              <div style={{fontSize:36,marginBottom:8}}>👥</div>
-              <div style={{color:T.muted,fontSize:14}}>No team members yet</div>
-              <div style={{color:T.muted,fontSize:12,marginTop:4}}>Invite friends to start earning</div>
-            </div>
+            {refStats.list && refStats.list.length > 0 ? (
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                {refStats.list.map((r,i) => {
+                  const name = r.referred?.username
+                    ? `@${r.referred.username}`
+                    : r.referred?.first_name ?? `User #${i+1}`;
+                  const isActive = r.status === "active";
+                  return (
+                    <div key={r.id} style={{background:T.card,border:`1px solid ${isActive?"#1e3a1e":"#1e2a1e"}`,borderRadius:12,padding:"12px 16px",display:"flex",alignItems:"center",gap:12}}>
+                      <div style={{width:38,height:38,borderRadius:"50%",background:`linear-gradient(135deg,${T.goldDim},#1a1a1a)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>
+                        {r.referred?.photo_url
+                          ? <img src={r.referred.photo_url} style={{width:38,height:38,borderRadius:"50%",objectFit:"cover"}} />
+                          : "👤"}
+                      </div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontWeight:700,fontSize:13,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{name}</div>
+                        <div style={{fontSize:11,color:isActive?T.green:T.muted,marginTop:2}}>{isActive?"✓ Active":"⏳ Pending"}</div>
+                      </div>
+                      <div style={{fontSize:10,color:T.muted,textAlign:"right",flexShrink:0}}>
+                        {r.active_days_this_month ?? 0} days<br/>this month
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div style={{background:T.card,border:"1px solid #1e2a1e",borderRadius:14,padding:24,textAlign:"center"}}>
+                <div style={{fontSize:36,marginBottom:8}}>👥</div>
+                <div style={{color:T.muted,fontSize:14}}>No team members yet</div>
+                <div style={{color:T.muted,fontSize:12,marginTop:4}}>Invite friends to start earning</div>
+              </div>
+            )}
           </div>
         )}
 
