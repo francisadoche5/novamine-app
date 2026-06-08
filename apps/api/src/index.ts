@@ -19,6 +19,7 @@ import { leaderboardRouter } from "./routes/leaderboard.js";
 import { adminRouter } from "./routes/admin.js";
 import { errorHandler } from "./middleware/error.js";
 import { startBot } from "./bot/index.js";
+import { updateReferralStatus } from "./cron/updateReferralStatus.js";
 
 const app = express();
 
@@ -85,3 +86,27 @@ startBot(app).catch((err) => {
 app.listen(config.port, () => {
   console.log(`[api] listening on :${config.port} (env=${config.nodeEnv})`);
 });
+
+// ── Daily cron: update referral active_days and status ────────────────────────
+function scheduleDailyCron() {
+  function msUntilMidnightUTC() {
+    const now = new Date();
+    const midnight = new Date(Date.UTC(
+      now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1
+    ));
+    return midnight.getTime() - now.getTime();
+  }
+
+  // Run immediately on boot so status is up to date
+  updateReferralStatus();
+
+  // Then schedule to run every 24h at midnight UTC
+  setTimeout(function tick() {
+    updateReferralStatus();
+    setTimeout(tick, 24 * 60 * 60 * 1000);
+  }, msUntilMidnightUTC());
+
+  console.log(`[cron] Next referral update in ${Math.round(msUntilMidnightUTC()/1000/60)} minutes`);
+}
+
+scheduleDailyCron();
