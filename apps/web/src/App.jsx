@@ -114,6 +114,22 @@ function genActivity(){
   return {...types[Math.floor(Math.random()*types.length)],time:"just now",id:Date.now()+Math.random()};
 }
 
+function SlotReel({symbol,spinning}){
+  return(
+    <div style={{
+      width:72,height:72,borderRadius:12,
+      background:"rgba(255,255,255,0.04)",
+      border:"1px solid rgba(245,200,66,0.2)",
+      display:"flex",alignItems:"center",justifyContent:"center",
+      fontSize:32,
+      animation:spinning?"reelSpin 0.15s ease-in-out infinite":"none",
+      transition:"all 0.15s",
+    }}>
+      {symbol}
+    </div>
+  );
+}
+
 function SwapModal({onClose,hashes,onSwapComplete}){
   const [amount,setAmount]=useState("");
   const [swapping,setSwapping]=useState(false);
